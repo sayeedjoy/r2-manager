@@ -172,6 +172,12 @@ export const api = {
 
   listMailMessages: () => request<{ messages: any[] }>("/api/v1/mail/messages"),
   getMailMessage: (id: string) => request<{ message: any; attachments: any[] }>(`/api/v1/mail/messages/${id}`),
+  attachmentContentUrl: (id: string) => `/api/v1/mail/attachments/${id}/content`,
+  copyAttachmentToFolder: (attachmentId: string, destBucket: string, destKey: string) =>
+    request<{ bucket: string; key: string; etag: string }>(`/api/v1/mail/attachments/${attachmentId}/copy-to-folder`, {
+      method: "POST",
+      body: json({ destBucket, destKey }),
+    }),
 
   listUsers: () => request<{ users: any[] }>("/api/v1/admin/users"),
   upsertUser: (body: any) => request("/api/v1/admin/users", { method: "POST", body: json(body) }),
