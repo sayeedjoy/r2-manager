@@ -52,8 +52,9 @@ export function normalizeKey(key: string): string {
 
 /** A "folder" key: normalized and guaranteed to end with a trailing slash. */
 export function normalizeFolderKey(key: string): string {
-  const normalized = normalizeKey(key.endsWith("/") ? key : `${key}/`);
-  return normalized.endsWith("/") ? normalized : `${normalized}/`;
+  // Validate without the trailing slash: splitKey treats "a/" as ["a", ""] and rejects the empty last segment.
+  const trimmed = key.trim();
+  return `${normalizeKey(trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed)}/`;
 }
 
 export function isFolderKey(key: string): boolean {

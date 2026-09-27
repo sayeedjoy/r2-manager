@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InvalidKeyError, isWithinPrefix, joinKey, normalizeKey, parentPrefix } from "@r2-manager/shared";
+import { InvalidKeyError, isWithinPrefix, joinKey, normalizeFolderKey, normalizeKey, parentPrefix } from "@r2-manager/shared";
 
 describe("normalizeKey", () => {
   it("accepts an ordinary nested key", () => {
@@ -37,5 +37,24 @@ describe("joinKey / parentPrefix", () => {
     const key = joinKey("a/b/", "c.txt");
     expect(key).toBe("a/b/c.txt");
     expect(parentPrefix(key)).toBe("a/b/");
+  });
+});
+
+describe("normalizeFolderKey", () => {
+  it("adds exactly one trailing slash", () => {
+    expect(normalizeFolderKey("reports")).toBe("reports/");
+    expect(normalizeFolderKey("team-a/reports")).toBe("team-a/reports/");
+  });
+
+  it("accepts a key that already ends in a slash", () => {
+    expect(normalizeFolderKey("team-a/reports/")).toBe("team-a/reports/");
+    expect(normalizeFolderKey(" reports/ ")).toBe("reports/");
+  });
+
+  it("still rejects unsafe folder keys", () => {
+    expect(() => normalizeFolderKey("")).toThrow(InvalidKeyError);
+    expect(() => normalizeFolderKey("/")).toThrow(InvalidKeyError);
+    expect(() => normalizeFolderKey("a//")).toThrow(InvalidKeyError);
+    expect(() => normalizeFolderKey("../secret/")).toThrow(InvalidKeyError);
   });
 });
