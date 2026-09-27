@@ -1,4 +1,5 @@
 import { useState, type ReactNode, type RefObject } from "react";
+import { UploadCloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { filesFromDataTransfer, filesFromFileList, type DroppedFile } from "./file-system-entries";
 
@@ -27,7 +28,10 @@ export function DropZone({ onFiles, children, className, pickerRef, folderPicker
         e.preventDefault();
         setIsOver(true);
       }}
-      onDragLeave={() => setIsOver(false)}
+      // dragleave also fires when the pointer crosses into a child element, which would make the overlay flicker.
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setIsOver(false);
+      }}
       onDrop={async (e) => {
         e.preventDefault();
         setIsOver(false);
@@ -63,7 +67,8 @@ export function DropZone({ onFiles, children, className, pickerRef, folderPicker
         }}
       />
       {isOver && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md border-2 border-dashed border-primary bg-primary/5 text-sm font-medium text-primary">
+        <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 rounded-[inherit] border-2 border-dashed border-primary bg-background/80 text-sm font-medium backdrop-blur-sm">
+          <UploadCloud className="size-6 text-muted-foreground" />
           Drop files or folders to upload
         </div>
       )}
