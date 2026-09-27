@@ -21,7 +21,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { formatBytes, formatDateTime, formatRelativeDate } from "@/lib/format";
+import { RelativeTime } from "@/components/relative-time";
+import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FileKindIcon } from "./file-icon";
 
@@ -138,13 +139,7 @@ export function FileTable({ entries, selected, onToggleSelect, onSelectAll, onOp
                     {entry.type === "file" ? formatBytes(entry.size) : "—"}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground md:table-cell">
-                    {entry.lastModified ? (
-                      <time dateTime={entry.lastModified} title={formatDateTime(entry.lastModified)}>
-                        {formatRelativeDate(entry.lastModified)}
-                      </time>
-                    ) : (
-                      "—"
-                    )}
+                    {entry.lastModified ? <RelativeTime value={entry.lastModified} /> : "—"}
                   </TableCell>
                   <TableCell className="pr-3 text-right" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>

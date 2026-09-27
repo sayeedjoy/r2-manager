@@ -3,7 +3,7 @@ import { format, formatDistanceToNowStrict } from "date-fns";
 const BYTE_UNITS = ["KB", "MB", "GB", "TB"];
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** "5 minutes ago" for the past week, where recency matters, then a plain date. Pair it with formatDateTime in a title. */
+/** "5 minutes ago" for the past week, where recency matters, then a plain date. RelativeTime shows the exact time on hover. */
 export function formatRelativeDate(iso: string): string {
   const date = new Date(iso);
   const age = Date.now() - date.getTime();
@@ -12,8 +12,14 @@ export function formatRelativeDate(iso: string): string {
   return age < WEEK_MS ? formatDistanceToNowStrict(date, { addSuffix: true }) : format(date, "MMM d, yyyy");
 }
 
+/** Local time with seconds and the UTC offset, e.g. "Sep 27, 2026, 9:32:10 PM GMT+6". */
 export function formatDateTime(iso: string): string {
-  return format(new Date(iso), "PPpp");
+  return format(new Date(iso), "PPpp O");
+}
+
+/** The same instant in UTC, e.g. "2026-09-27 15:32:10 UTC", for matching against server logs. */
+export function formatUtc(iso: string): string {
+  return `${new Date(iso).toISOString().slice(0, 19).replace("T", " ")} UTC`;
 }
 
 export function formatBytes(bytes?: number | null): string {

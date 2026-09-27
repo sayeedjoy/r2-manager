@@ -26,7 +26,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { PageHeader } from "@/components/layout/page-header";
 import { TableCard, TableSkeleton } from "@/components/layout/table-card";
 import { api, type MailAttachment, type MailMessage } from "@/lib/api";
-import { formatBytes, formatDateTime, formatRelativeDate } from "@/lib/format";
+import { RelativeTime } from "@/components/relative-time";
+import { formatBytes, formatDateTime } from "@/lib/format";
 import { useBuckets } from "@/hooks/use-listing";
 
 type StatusFilter = "all" | MailMessage["status"];
@@ -130,9 +131,7 @@ export function InboxPage() {
                   </button>
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground md:table-cell">
-                  <time dateTime={m.receivedAt} title={formatDateTime(m.receivedAt)}>
-                    {formatRelativeDate(m.receivedAt)}
-                  </time>
+                  <RelativeTime value={m.receivedAt} />
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={m.status} reason={m.reason} />

@@ -24,7 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
-import { formatDateTime, formatRelativeDate } from "@/lib/format";
+import { RelativeTime } from "@/components/relative-time";
 import { notifyError } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -234,7 +234,7 @@ function ActiveShare({ share, onRevoke }: { share: Share; onRevoke: () => void }
       </ItemMedia>
       <ItemContent className="min-w-0">
         <ItemTitle>
-          Created <time title={formatDateTime(share.createdAt)}>{formatRelativeDate(share.createdAt)}</time>
+          <RelativeTime value={share.createdAt} prefix="Created" />
           {share.hasPassword && (
             <Badge variant="secondary">
               <Lock data-icon="inline-start" />
@@ -244,7 +244,7 @@ function ActiveShare({ share, onRevoke }: { share: Share; onRevoke: () => void }
         </ItemTitle>
         <ItemDescription>
           {downloads} ·{" "}
-          {share.expiresAt ? <span title={formatDateTime(share.expiresAt)}>expires {formatRelativeDate(share.expiresAt)}</span> : "never expires"}
+          {share.expiresAt ? <RelativeTime value={share.expiresAt} prefix="expires" /> : "never expires"}
         </ItemDescription>
       </ItemContent>
       <ItemActions>

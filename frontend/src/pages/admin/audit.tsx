@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { PageHeader } from "@/components/layout/page-header";
 import { TableCard, TableSkeleton } from "@/components/layout/table-card";
 import { api, type AuditEvent } from "@/lib/api";
-import { formatDateTime, formatRelativeDate } from "@/lib/format";
+import { RelativeTime } from "@/components/relative-time";
 import { cn } from "@/lib/utils";
 
 type OutcomeFilter = "all" | AuditEvent["outcome"];
@@ -97,9 +97,7 @@ export function AdminAuditPage() {
             {visible.map((e) => (
               <TableRow key={e.id}>
                 <TableCell className="text-muted-foreground">
-                  <time dateTime={e.createdAt} title={formatDateTime(e.createdAt)}>
-                    {formatRelativeDate(e.createdAt)}
-                  </time>
+                  <RelativeTime value={e.createdAt} />
                 </TableCell>
                 <TableCell>
                   <code className="font-mono text-xs">{e.action}</code>
