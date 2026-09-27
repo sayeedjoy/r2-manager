@@ -1,13 +1,25 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import { TriangleAlert } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
 import { baseName, joinKey, normalizeFolderKey } from "@r2-manager/shared";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/native-select";
-import { Progress } from "@/components/ui/progress";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
+import { pluralize } from "@/lib/format";
 import { useBuckets } from "@/hooks/use-listing";
 
 interface MoveCopyDialogProps {
@@ -32,6 +44,10 @@ export function MoveCopyDialog({ mode, sourceBucket, entries, onClose, onDone }:
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const verb = mode === "move" ? "Move" : "Copy";
+  const summary =
+    entries.length === 1 ? `"${baseName(entries[0].key)}"` : pluralize(entries.length, "item");
+
   async function runFolderOp(entry: ObjectEntry) {
     let cursor: string | undefined;
     for (;;) {
@@ -52,7 +68,8 @@ export function MoveCopyDialog({ mode, sourceBucket, entries, onClose, onDone }:
     }
   }
 
-  async function handleConfirm() {
+  async function handleConfirm(event: FormEvent) {
+    event.preventDefault();
     setBusy(true);
     setError(null);
     setProgress({ done: 0, total: entries.length });
@@ -78,45 +95,70 @@ export function MoveCopyDialog({ mode, sourceBucket, entries, onClose, onDone }:
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{mode === "move" ? "Move" : "Copy"} {entries.length} item{entries.length === 1 ? "" : "s"}</DialogTitle>
-        </DialogHeader>
+        <form onSubmit={handleConfirm} className="contents">
+          <DialogHeader>
+            <DialogTitle>
+              {verb} {summary}
+            </DialogTitle>
+            <DialogDescription>
+              Name clashes at the destination get a numbered copy instead of overwriting.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="dest-bucket">Destination bucket</Label>
-            <NativeSelect id="dest-bucket" value={destBucket} onChange={(e) => setDestBucket(e.target.value)}>
-              {bucketsData?.buckets.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div>
-            <Label htmlFor="dest-prefix">Destination folder (blank for bucket root)</Label>
-            <Input id="dest-prefix" value={destPrefix} onChange={(e) => setDestPrefix(e.target.value)} placeholder="team-a/reports" />
-          </div>
-        </div>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="dest-bucket">Destination bucket</FieldLabel>
+              <NativeSelect id="dest-bucket" value={destBucket} onChange={(e) => setDestBucket(e.target.value)} disabled={busy}>
+                {bucketsData?.buckets.map((b) => (
+                  <NativeSelectOption key={b} value={b}>
+                    {b}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="dest-prefix">Destination folder</FieldLabel>
+              <Input
+                id="dest-prefix"
+                value={destPrefix}
+                onChange={(e) => setDestPrefix(e.target.value)}
+                placeholder="team-a/reports"
+                autoComplete="off"
+                disabled={busy}
+                className="font-mono"
+              />
+              <FieldDescription>Leave blank for the bucket root.</FieldDescription>
+            </Field>
+          </FieldGroup>
 
-        {progress && (
-          <div className="space-y-1">
-            <Progress value={(progress.done / progress.total) * 100} />
-            <div className="text-xs text-muted-foreground">
-              {progress.done} / {progress.total} items
-            </div>
-          </div>
-        )}
-        {error && <div className="text-sm text-destructive">{error}</div>}
+          {progress && (
+            <Progress value={(progress.done / progress.total) * 100}>
+              <ProgressLabel>{mode === "move" ? "Moving" : "Copying"}</ProgressLabel>
+              <ProgressValue>{() => `${progress.done} of ${progress.total}`}</ProgressValue>
+            </Progress>
+          )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm} disabled={busy}>
-            {busy ? "Working..." : mode === "move" ? "Move" : "Copy"}
-          </Button>
-        </DialogFooter>
+          {error && (
+            <Alert variant="destructive">
+              <TriangleAlert />
+              <AlertTitle>{verb} stopped partway</AlertTitle>
+              {/* NFR-09: tree ops aren't atomic, so say plainly that some items may already be done. */}
+              <AlertDescription>
+                {error}
+                {progress && progress.done > 0 &&
+                  ` ${pluralize(progress.done, "item")} before this one ${progress.done === 1 ? "was" : "were"} already ${mode === "move" ? "moved" : "copied"}.`}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" disabled={busy} />}>Cancel</DialogClose>
+            <Button type="submit" disabled={busy}>
+              {busy && <Spinner data-icon="inline-start" />}
+              {verb}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
