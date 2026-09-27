@@ -27,6 +27,7 @@ import { MoveCopyDialog } from "@/features/files/move-copy-dialog";
 import { ShareDialog } from "@/features/shares/share-dialog";
 import { PreviewSheet } from "@/features/preview/preview-sheet";
 import { EditorDialog } from "@/features/editor/editor-dialog";
+import { MetadataDialog } from "@/features/metadata/metadata-dialog";
 
 export function BrowserPage() {
   const { bucket = "", "*": splat = "" } = useParams();
@@ -46,6 +47,7 @@ export function BrowserPage() {
   const [renameValue, setRenameValue] = useState("");
   const [previewTarget, setPreviewTarget] = useState<ObjectEntry | null>(null);
   const [editTarget, setEditTarget] = useState<ObjectEntry | null>(null);
+  const [metadataTarget, setMetadataTarget] = useState<ObjectEntry | null>(null);
   const [view, setView] = useState<"list" | "grid">("list");
   const [filter, setFilter] = useState("");
   const [moveCopyMode, setMoveCopyMode] = useState<"move" | "copy" | null>(null);
@@ -179,6 +181,7 @@ export function BrowserPage() {
       },
     },
     { label: "Share", onSelect: (entry) => setShareTarget(entry), showFor: (e) => e.type === "file" },
+    { label: "Metadata", onSelect: (entry) => setMetadataTarget(entry), showFor: (e) => e.type === "file" },
     { label: "Delete", onSelect: handleDelete, destructive: true },
   ];
 
@@ -274,6 +277,18 @@ export function BrowserPage() {
 
       {shareTarget && (
         <ShareDialog bucket={bucket} entry={shareTarget} onClose={() => setShareTarget(null)} />
+      )}
+
+      {metadataTarget && (
+        <MetadataDialog
+          bucket={bucket}
+          entry={metadataTarget}
+          onClose={() => setMetadataTarget(null)}
+          onSaved={() => {
+            setMetadataTarget(null);
+            refresh();
+          }}
+        />
       )}
 
       {moveCopyMode && (
