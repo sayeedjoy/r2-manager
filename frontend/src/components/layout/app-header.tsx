@@ -11,6 +11,7 @@ const MOD_KEY = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navig
 
 /** The top bar of every page: sidebar toggle, then where you are. */
 export function AppHeader() {
+  const crumbs = useHeaderBreadcrumbs();
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
       <Tooltip>
@@ -23,13 +24,18 @@ export function AppHeader() {
           </KbdGroup>
         </TooltipContent>
       </Tooltip>
-      <Separator orientation="vertical" className="mr-1 data-vertical:h-4 data-vertical:self-auto" />
-      <HeaderBreadcrumbs />
+      {crumbs && (
+        <>
+          <Separator orientation="vertical" className="mr-1 data-vertical:h-4 data-vertical:self-auto" />
+          {crumbs}
+        </>
+      )}
     </header>
   );
 }
 
-function HeaderBreadcrumbs() {
+/** Returns null on routes with nothing to show (home, 404), so the header can drop its divider too. */
+function useHeaderBreadcrumbs() {
   const { pathname } = useLocation();
   const browse = useMatch("/b/:bucket/*");
 
