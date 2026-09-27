@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { cors } from "hono/cors";
 import { ZodError } from "zod";
-import { AppError } from "@r2-manager/shared";
+import { AppError, InvalidKeyError } from "@r2-manager/shared";
 import type { HonoEnv } from "./types";
 import type { AppConfig } from "./config";
 import { createDb, type Database } from "./db/client";
@@ -93,6 +93,12 @@ export function createApp(opts: CreateAppOptions) {
     }
     if (err instanceof ZodError) {
       const appErr = new AppError("VALIDATION_ERROR", "Invalid request", err.flatten());
+      return c.json(appErr.toBody(correlationIdValue), 400);
+    }
+    // Services normalize user-supplied keys with shared/keys.ts. Its messages ("Key must not contain '..'") are safe
+    // to show and tell the user what to fix, so return them as a 400 instead of a generic 500.
+    if (err instanceof InvalidKeyError) {
+      const appErr = new AppError("VALIDATION_ERROR", err.message);
       return c.json(appErr.toBody(correlationIdValue), 400);
     }
     if (err instanceof HTTPException) {
