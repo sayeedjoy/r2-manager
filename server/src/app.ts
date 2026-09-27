@@ -14,6 +14,7 @@ import { accessJwt } from "./middleware/access-jwt";
 import { basicAuth } from "./middleware/basic-auth";
 import { authGate } from "./middleware/auth-gate";
 
+import me from "./routes/v1/me";
 import buckets from "./routes/v1/buckets";
 import objects from "./routes/v1/objects";
 import folders from "./routes/v1/folders";
@@ -72,6 +73,7 @@ export function createApp(opts: CreateAppOptions) {
   api.use("*", accessJwt());
   api.use("*", basicAuth());
   api.use("*", authGate());
+  api.route("/me", me);
   api.route("/buckets", buckets);
   api.route("/objects", objects);
   api.route("/folders", folders);
