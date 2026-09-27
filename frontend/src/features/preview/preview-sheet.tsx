@@ -58,8 +58,14 @@ export function PreviewSheet({ bucket, entry, onClose, onEdit }: PreviewSheetPro
 
         if (kind === "image" || kind === "pdf") {
           const res = await fetch(contentUrl, { credentials: "include" });
-          const blob = await res.blob();
+          if (!res.ok) throw new Error("Failed to load preview.");
+          let blob = await res.blob();
           if (cancelled) return;
+          // PREV-01: pin the PDF blob's type so the browser always hands it to
+          // its PDF viewer and never renders it as HTML on our origin, whatever
+          // content type the object was stored with. That makes an iframe
+          // sandbox unnecessary (Chrome refuses to show PDFs in sandboxed frames).
+          if (kind === "pdf") blob = new Blob([blob], { type: "application/pdf" });
           objectUrl = URL.createObjectURL(blob);
           setState({ status: "binary", blobUrl: objectUrl, contentType: metadata.contentType ?? blob.type });
         } else if (kind === "unsupported") {
@@ -107,7 +113,7 @@ export function PreviewSheet({ bucket, entry, onClose, onEdit }: PreviewSheetPro
           )}
 
           {state.status === "binary" && kind === "pdf" && (
-            <iframe title={baseName(entry.key)} src={state.blobUrl} sandbox="allow-same-origin" className="h-[65vh] w-full rounded border" />
+            <iframe title={baseName(entry.key)} src={state.blobUrl} className="h-[65vh] w-full rounded border" />
           )}
 
           {state.status === "text" && kind === "markdown" && (
