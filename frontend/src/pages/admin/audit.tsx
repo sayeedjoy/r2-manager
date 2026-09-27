@@ -21,7 +21,7 @@ export function AdminAuditPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data?.events.map((e: any) => (
+          {data?.events.map((e) => (
             <TableRow key={e.id}>
               <TableCell>{new Date(e.createdAt).toLocaleString()}</TableCell>
               <TableCell>{e.action}</TableCell>

@@ -1,4 +1,13 @@
-import type { ApiErrorBody, ListObjectsResponse, ObjectMetadata, Role, Share, TreeOperationResponse } from "@r2-manager/shared";
+import type {
+  ApiErrorBody,
+  AppSettings,
+  ListObjectsResponse,
+  ObjectMetadata,
+  Role,
+  Share,
+  TreeOperationResponse,
+  UserRecord,
+} from "@r2-manager/shared";
 
 export class ApiError extends Error {
   readonly body: ApiErrorBody;
@@ -33,6 +42,45 @@ export interface Me {
   identity: string;
   displayName: string;
   role: Role;
+}
+
+/** Mirrors server/src/db/schema.ts mail_messages as the mail routes return it. */
+export interface MailMessage {
+  id: string;
+  externalMessageId: string | null;
+  sender: string;
+  recipient: string;
+  subject: string | null;
+  receivedAt: string;
+  status: "processed" | "rejected" | "failed";
+  reason: string | null;
+}
+
+export interface MailAttachment {
+  id: string;
+  messageId: string;
+  displayFilename: string;
+  mimeType: string | null;
+  size: number | null;
+  status: "stored" | "rejected";
+}
+
+export interface AuditEvent {
+  id: string;
+  actorId: string | null;
+  action: string;
+  target: string | null;
+  outcome: "success" | "failure";
+  correlationId: string;
+  details: unknown;
+  createdAt: string;
+}
+
+export interface UpsertUserBody {
+  identity: string;
+  displayName: string;
+  role: Role;
+  grants: { bucket: string; prefix: string }[];
 }
 
 export const api = {
@@ -179,8 +227,8 @@ export const api = {
 
   revokeShare: (id: string) => request(`/api/v1/shares/${id}/revoke`, { method: "POST" }),
 
-  listMailMessages: () => request<{ messages: any[] }>("/api/v1/mail/messages"),
-  getMailMessage: (id: string) => request<{ message: any; attachments: any[] }>(`/api/v1/mail/messages/${id}`),
+  listMailMessages: () => request<{ messages: MailMessage[] }>("/api/v1/mail/messages"),
+  getMailMessage: (id: string) => request<{ message: MailMessage; attachments: MailAttachment[] }>(`/api/v1/mail/messages/${id}`),
   attachmentContentUrl: (id: string) => `/api/v1/mail/attachments/${id}/content`,
   copyAttachmentToFolder: (attachmentId: string, destBucket: string, destKey: string) =>
     request<{ bucket: string; key: string; etag: string }>(`/api/v1/mail/attachments/${attachmentId}/copy-to-folder`, {
@@ -188,11 +236,12 @@ export const api = {
       body: json({ destBucket, destKey }),
     }),
 
-  listUsers: () => request<{ users: any[] }>("/api/v1/admin/users"),
-  upsertUser: (body: any) => request("/api/v1/admin/users", { method: "POST", body: json(body) }),
+  listUsers: () => request<{ users: UserRecord[] }>("/api/v1/admin/users"),
+  upsertUser: (body: UpsertUserBody) => request<{ id: string }>("/api/v1/admin/users", { method: "POST", body: json(body) }),
   disableUser: (id: string) => request(`/api/v1/admin/users/${id}/disable`, { method: "POST" }),
-  getSettings: () => request<any>("/api/v1/admin/settings"),
-  updateSettings: (body: any) => request("/api/v1/admin/settings", { method: "PUT", body: json(body) }),
-  getAudit: () => request<{ events: any[] }>("/api/v1/admin/audit"),
+  getSettings: () => request<AppSettings>("/api/v1/admin/settings"),
+  updateSettings: (body: Partial<AppSettings>) =>
+    request<AppSettings>("/api/v1/admin/settings", { method: "PUT", body: json(body) }),
+  getAudit: () => request<{ events: AuditEvent[] }>("/api/v1/admin/audit"),
   getHealth: () => request<{ checks: Record<string, string>; buckets: string[] }>("/api/v1/admin/health"),
 };

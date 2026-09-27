@@ -39,7 +39,7 @@ export function InboxPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.messages.map((m: any) => (
+            {data.messages.map((m) => (
               <TableRow key={m.id} className="cursor-pointer" onClick={() => setOpenMessageId(m.id)}>
                 <TableCell>{m.sender}</TableCell>
                 <TableCell>{m.recipient}</TableCell>
@@ -82,7 +82,7 @@ function MessageDialog({ messageId, onClose }: { messageId: string; onClose: () 
               <Label>Attachments</Label>
               {data.attachments.length === 0 && <div className="text-sm text-muted-foreground">No attachments.</div>}
               <div className="space-y-1">
-                {data.attachments.map((a: any) => (
+                {data.attachments.map((a) => (
                   <div key={a.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
                     <span className="truncate">
                       {a.displayFilename}

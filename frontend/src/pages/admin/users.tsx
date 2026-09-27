@@ -8,6 +8,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { Role, UserRecord } from "@r2-manager/shared";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/components/confirm-dialog";
 
@@ -22,8 +23,8 @@ export function AdminUsersPage() {
   const { data } = useQuery({ queryKey: ["admin", "users"], queryFn: api.listUsers });
   const [identity, setIdentity] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [role, setRole] = useState("viewer");
-  const [manageUser, setManageUser] = useState<any | null>(null);
+  const [role, setRole] = useState<Role>("viewer");
+  const [manageUser, setManageUser] = useState<UserRecord | null>(null);
   const confirm = useConfirm();
 
   function refresh() {
@@ -65,7 +66,7 @@ export function AdminUsersPage() {
         </div>
         <div>
           <Label htmlFor="role">Role</Label>
-          <NativeSelect id="role" value={role} onChange={(e) => setRole(e.target.value)}>
+          <NativeSelect id="role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
             <option value="admin">Admin</option>
             <option value="editor">Editor</option>
             <option value="viewer">Viewer</option>
@@ -86,7 +87,7 @@ export function AdminUsersPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data?.users.map((u: any) => (
+          {data?.users.map((u) => (
             <TableRow key={u.id}>
               <TableCell>{u.identity}</TableCell>
               <TableCell>{u.displayName}</TableCell>
@@ -130,7 +131,7 @@ export function AdminUsersPage() {
   );
 }
 
-function GrantsDialog({ user, onClose, onSaved }: { user: any; onClose: () => void; onSaved: () => void }) {
+function GrantsDialog({ user, onClose, onSaved }: { user: UserRecord; onClose: () => void; onSaved: () => void }) {
   const [grants, setGrants] = useState<Grant[]>(user.grants ?? []);
   const [busy, setBusy] = useState(false);
 
