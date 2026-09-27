@@ -37,3 +37,14 @@ export async function checkRateLimit(db: Database, key: string, opts: RateLimitO
   const count = Number((rows as unknown as { count: number }[])[0]?.count ?? 1);
   return { allowed: count <= opts.max, remaining: Math.max(0, opts.max - count) };
 }
+
+/** Read-only: whether `key` has already used up its window, without counting this call. */
+export async function isRateLimited(db: Database, key: string, opts: RateLimitOptions): Promise<boolean> {
+  const rows = await db.execute<{ count: number }>(sql`
+    SELECT count FROM rate_limits
+    WHERE key = ${key}
+      AND window_start >= now() - (${opts.windowSeconds} || ' seconds')::interval
+  `);
+  const count = Number((rows as unknown as { count: number }[])[0]?.count ?? 0);
+  return count >= opts.max;
+}

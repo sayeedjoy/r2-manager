@@ -1,11 +1,16 @@
 import type { MiddlewareHandler } from "hono";
 import type { HonoEnv } from "../types";
 import { verifyPassword, timingSafeStringEqual } from "../services/crypto";
-import { checkRateLimit } from "./rate-limit";
+import { checkRateLimit, isRateLimited } from "./rate-limit";
+
+const FAILED_ATTEMPTS_LIMIT = { max: 10, windowSeconds: 60 };
 
 /**
  * AUTH-02: HTTP Basic Authentication as a configurable alternative for small
- * deployments. Failed attempts are rate limited by remote address.
+ * deployments. Only failed attempts count toward the rate limit: browsers
+ * resend Basic credentials on every request, so counting successes would
+ * lock out ordinary use. A locked-out address is refused before its
+ * password is checked.
  * Sets c.set("basicAuthOk", true) on success; does not itself deny requests
  * so auth-gate.ts can combine this with Access mode (AUTH-03).
  */
@@ -14,9 +19,9 @@ export const basicAuth = (): MiddlewareHandler<HonoEnv & { Variables: { basicAut
   const header = c.req.header("authorization");
 
   if (header?.startsWith("Basic ")) {
-    const ip = c.req.header("x-forwarded-for") ?? "unknown";
-    const rl = await checkRateLimit(c.get("db"), `basic-auth:${ip}`, { max: 10, windowSeconds: 60 });
-    if (!rl.allowed) {
+    const db = c.get("db");
+    const rateKey = `basic-auth:${c.req.header("x-forwarded-for") ?? "unknown"}`;
+    if (await isRateLimited(db, rateKey, FAILED_ATTEMPTS_LIMIT)) {
       c.set("basicAuthOk", false);
       await next();
       return;
@@ -36,6 +41,10 @@ export const basicAuth = (): MiddlewareHandler<HonoEnv & { Variables: { basicAut
       c.set("basicAuthOk", usernameOk && passwordOk);
     } catch {
       c.set("basicAuthOk", false);
+    }
+
+    if (!c.get("basicAuthOk")) {
+      await checkRateLimit(db, rateKey, FAILED_ATTEMPTS_LIMIT);
     }
   } else {
     c.set("basicAuthOk", false);
