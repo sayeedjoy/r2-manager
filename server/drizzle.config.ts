@@ -1,5 +1,9 @@
 import { defineConfig } from "drizzle-kit";
-import "dotenv/config";
+import { config as loadDotenv } from "dotenv";
+import { fileURLToPath } from "node:url";
+
+// Load the repo-root .env regardless of cwd; see server/src/entry/node.ts for why.
+loadDotenv({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 export default defineConfig({
   schema: "./src/db/schema.ts",

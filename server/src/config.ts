@@ -55,11 +55,24 @@ export interface AppConfig {
 
 let cached: AppConfig | undefined;
 
+/**
+ * `.env` files commonly leave optional keys present but blank (as in
+ * .env.example). Treat "" the same as unset so optional fields like
+ * R2_ENDPOINT don't fail url validation just for being empty.
+ */
+function blankToUndefined(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(source)) {
+    result[key] = value === "" ? undefined : value;
+  }
+  return result;
+}
+
 /** Parses and validates process.env. Throws (refuses to start) if auth is unconfigured (AUTH-03). */
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached) return cached;
 
-  const parsed = envSchema.safeParse(source);
+  const parsed = envSchema.safeParse(blankToUndefined(source));
   if (!parsed.success) {
     const details = parsed.error.issues.map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n");
     throw new Error(`Invalid server configuration:\n${details}`);

@@ -1,7 +1,11 @@
-import "dotenv/config";
+import { config as loadDotenv } from "dotenv";
+import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
+
+// Load the repo-root .env regardless of cwd; see entry/node.ts for why.
+loadDotenv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
