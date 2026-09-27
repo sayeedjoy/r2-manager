@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import { desc, eq } from "drizzle-orm";
-import { AppError, appSettingsSchema, upsertUserSchema } from "@r2-manager/shared";
+import { eq } from "drizzle-orm";
+import { AppError, appSettingsSchema, auditQuerySchema, upsertUserSchema } from "@r2-manager/shared";
 import type { HonoEnv } from "../../types";
 import { requireCapability } from "../../services/authz";
-import { users, grants, auditEvents } from "../../db/schema";
+import { users, grants } from "../../db/schema";
 import { getSettings, updateSettings } from "../../services/settings";
-import { recordAudit } from "../../services/audit";
+import { listAuditEvents, recordAudit } from "../../services/audit";
 
 const app = new Hono<HonoEnv>();
 
@@ -95,12 +95,10 @@ app.put("/settings", async (c) => {
   return c.json(next);
 });
 
-/** ADMIN-01: audit trail, most recent first. */
+/** ADMIN-01: audit trail, most recent first, paginated and filterable (?limit, ?offset, ?outcome, ?q). */
 app.get("/audit", async (c) => {
-  const db = c.get("db");
-  const limit = Math.min(Number(c.req.query("limit") ?? 100), 500);
-  const rows = await db.query.auditEvents.findMany({ orderBy: desc(auditEvents.createdAt), limit });
-  return c.json({ events: rows });
+  const query = auditQuerySchema.parse(c.req.query());
+  return c.json(await listAuditEvents(c.get("db"), query));
 });
 
 /** ADMIN-03: deployment health, without exposing secrets. */

@@ -8,3 +8,4 @@ export * from "./schemas/upload";
 export * from "./schemas/share";
 export * from "./schemas/metadata";
 export * from "./schemas/settings";
+export * from "./schemas/audit";
