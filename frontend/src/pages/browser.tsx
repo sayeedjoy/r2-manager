@@ -27,6 +27,9 @@ import { ShareDialog } from "@/features/shares/share-dialog";
 import { PreviewSheet } from "@/features/preview/preview-sheet";
 import { EditorDialog } from "@/features/editor/editor-dialog";
 import { MetadataDialog } from "@/features/metadata/metadata-dialog";
+import { useConfirm } from "@/components/confirm-dialog";
+import { toast } from "@/components/ui/toast";
+import { notifyError, notifyInfo } from "@/lib/notify";
 
 export function BrowserPage() {
   const { bucket = "", "*": splat = "" } = useParams();
@@ -34,6 +37,7 @@ export function BrowserPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { enqueue } = useUploadQueue();
+  const confirm = useConfirm();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,57 +92,99 @@ export function BrowserPage() {
 
   /** XFER-01/02: uploads dropped/selected files, preserving folder structure when present; rejects unsafe paths. */
   function handleFiles(files: DroppedFile[]) {
+    const skipped: string[] = [];
     for (const { file, relativePath } of files) {
       let key: string;
       try {
         key = normalizeKey(`${prefix}${relativePath}`);
       } catch (err) {
         if (err instanceof InvalidKeyError) {
-          alert(`Skipped "${relativePath}": ${err.message}`);
+          skipped.push(`"${relativePath}": ${err.message}`);
           continue;
         }
         throw err;
       }
       enqueue(file, bucket, key, refresh);
     }
+    if (skipped.length > 0) {
+      toast.add({
+        type: "warning",
+        title: `Skipped ${skipped.length} ${skipped.length === 1 ? "item" : "items"} with unsafe names`,
+        description: skipped.slice(0, 3).join("; ") + (skipped.length > 3 ? "; …" : ""),
+      });
+    }
   }
 
   async function handleCreateFolder() {
     if (!newFolderName.trim()) return;
-    await api.createFolder(bucket, `${prefix}${newFolderName.trim()}`);
+    try {
+      await api.createFolder(bucket, `${prefix}${newFolderName.trim()}`);
+    } catch (err) {
+      notifyError("Couldn't create the folder", err);
+      return;
+    }
     setNewFolderOpen(false);
     setNewFolderName("");
     refresh();
   }
 
   async function handleDelete(entry: ObjectEntry) {
-    if (!confirm(`Delete "${baseName(entry.key)}"? This cannot be undone.`)) return;
-    await api.deleteObjects(bucket, [entry.key]);
+    const ok = await confirm({
+      title: `Delete "${baseName(entry.key)}"?`,
+      description: "This can't be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await api.deleteObjects(bucket, [entry.key]);
+    } catch (err) {
+      notifyError("Couldn't delete", err);
+    }
     refresh();
   }
 
   async function handleRenameConfirm() {
     if (!renameTarget || !renameValue.trim()) return;
-    await api.rename(bucket, renameTarget.key, renameValue.trim());
+    try {
+      await api.rename(bucket, renameTarget.key, renameValue.trim());
+    } catch (err) {
+      notifyError("Couldn't rename", err);
+      return;
+    }
     setRenameTarget(null);
     refresh();
   }
 
   /** FILE-05/FILE-07: bulk delete, confirming exactly what will be affected; folders run as tree-op batches. */
   async function handleBulkDelete() {
-    if (!confirm(`Delete ${selectedEntries.length} item(s)? This cannot be undone.`)) return;
+    const count = selectedEntries.length;
+    const ok = await confirm({
+      title: `Delete ${count} ${count === 1 ? "item" : "items"}?`,
+      description: selectedEntries.some((e) => e.type === "folder")
+        ? "Folders are deleted with everything inside them. This can't be undone."
+        : "This can't be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     const files = selectedEntries.filter((e) => e.type === "file");
     const folders = selectedEntries.filter((e) => e.type === "folder");
 
-    if (files.length > 0) await api.deleteObjects(bucket, files.map((e) => e.key));
-    for (const folder of folders) {
-      let cursor: string | undefined;
-      for (;;) {
-        const result = await api.treeOp({ op: "delete", sourceBucket: bucket, sourcePrefix: folder.key, cursor });
-        if (result.done) break;
-        cursor = result.cursor ?? undefined;
+    try {
+      if (files.length > 0) await api.deleteObjects(bucket, files.map((e) => e.key));
+      for (const folder of folders) {
+        let cursor: string | undefined;
+        for (;;) {
+          const result = await api.treeOp({ op: "delete", sourceBucket: bucket, sourcePrefix: folder.key, cursor });
+          if (result.done) break;
+          cursor = result.cursor ?? undefined;
+        }
+        await api.deleteObjects(bucket, [folder.key]); // remove the now-empty folder placeholder itself
       }
-      await api.deleteObjects(bucket, [folder.key]); // remove the now-empty folder placeholder itself
+    } catch (err) {
+      // NFR-09: folder deletes aren't atomic, so some items may already be gone. The refresh below shows what's left.
+      notifyError("Delete stopped partway", err);
     }
     refresh();
   }
@@ -147,13 +193,13 @@ export function BrowserPage() {
   async function handleBulkDownload() {
     const files = selectedEntries.filter((e) => e.type === "file");
     if (files.length === 0) {
-      alert("Select at least one file to download (folders aren't included in bulk downloads).");
+      notifyInfo("Select at least one file to download", "Folders aren't included in bulk downloads.");
       return;
     }
     try {
       await api.downloadZip(bucket, files.map((e) => e.key));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Bulk download failed.");
+      notifyError("Bulk download failed", err);
     }
   }
 
@@ -168,7 +214,7 @@ export function BrowserPage() {
       label: "Edit",
       onSelect: (entry) => {
         if (isEditableKind(previewKindFor(entry.key))) setEditTarget(entry);
-        else alert("This file type isn't supported by the text editor.");
+        else notifyInfo("This file type can't be opened in the text editor");
       },
       showFor: (e) => e.type === "file",
     },

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
+import { useConfirm } from "@/components/confirm-dialog";
 
 interface EditorDialogProps {
   bucket: string;
@@ -26,6 +27,7 @@ interface EditorDialogProps {
  * conflict check on save.
  */
 export function EditorDialog({ bucket, entry, onClose, onSaved }: EditorDialogProps) {
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [original, setOriginal] = useState("");
   const [content, setContent] = useState("");
@@ -66,8 +68,8 @@ export function EditorDialog({ bucket, entry, onClose, onSaved }: EditorDialogPr
     };
   }, [bucket, entry.key]);
 
-  function handleClose() {
-    if (dirty && !confirm("Discard unsaved changes?")) return;
+  async function handleClose() {
+    if (dirty && !(await confirm({ title: "Discard unsaved changes?", confirmLabel: "Discard", destructive: true }))) return;
     onClose();
   }
 

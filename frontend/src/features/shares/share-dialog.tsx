@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { useConfirm } from "@/components/confirm-dialog";
 
 interface ShareDialogProps {
   bucket: string;
@@ -20,6 +21,7 @@ interface ShareDialogProps {
 /** SHARE-01/05: create a revocable link with optional password/expiry/download limit, and manage existing ones. */
 export function ShareDialog({ bucket, entry, onClose }: ShareDialogProps) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const sharesQuery = useQuery({
     queryKey: ["shares", bucket, entry.key],
     queryFn: () => api.listShares(bucket, entry.key),
@@ -51,7 +53,13 @@ export function ShareDialog({ bucket, entry, onClose }: ShareDialogProps) {
   }
 
   async function handleRevoke(shareId: string) {
-    if (!confirm("Revoke this share link? Anyone holding it will immediately lose access.")) return;
+    const ok = await confirm({
+      title: "Revoke this share link?",
+      description: "Anyone holding the link loses access immediately.",
+      confirmLabel: "Revoke",
+      destructive: true,
+    });
+    if (!ok) return;
     await api.revokeShare(shareId);
     qc.invalidateQueries({ queryKey: ["shares", bucket, entry.key] });
   }

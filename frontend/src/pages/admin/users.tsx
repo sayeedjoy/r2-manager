@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
+import { useConfirm } from "@/components/confirm-dialog";
 
 interface Grant {
   bucket: string;
@@ -23,6 +24,7 @@ export function AdminUsersPage() {
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState("viewer");
   const [manageUser, setManageUser] = useState<any | null>(null);
+  const confirm = useConfirm();
 
   function refresh() {
     qc.invalidateQueries({ queryKey: ["admin", "users"] });
@@ -36,8 +38,14 @@ export function AdminUsersPage() {
     refresh();
   }
 
-  async function handleDisable(id: string) {
-    if (!confirm("Disable this user? They will immediately lose access.")) return;
+  async function handleDisable(id: string, identity: string) {
+    const ok = await confirm({
+      title: `Disable ${identity}?`,
+      description: "They lose access immediately. Their audit history is kept.",
+      confirmLabel: "Disable",
+      destructive: true,
+    });
+    if (!ok) return;
     await api.disableUser(id);
     refresh();
   }
@@ -98,7 +106,7 @@ export function AdminUsersPage() {
                   <Settings2 className="size-4" />
                 </Button>
                 {u.status === "active" && (
-                  <Button variant="ghost" size="icon" aria-label={`Disable ${u.identity}`} onClick={() => handleDisable(u.id)}>
+                  <Button variant="ghost" size="icon" aria-label={`Disable ${u.identity}`} onClick={() => handleDisable(u.id, u.identity)}>
                     <Trash2 className="size-4" />
                   </Button>
                 )}
