@@ -1,0 +1,129 @@
+import {
+  pgTable,
+  text,
+  timestamp,
+  integer,
+  boolean,
+  jsonb,
+  uuid,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  identity: text("identity").notNull().unique(), // e.g. Access email, or basic-auth username
+  displayName: text("display_name").notNull(),
+  role: text("role", { enum: ["admin", "editor", "viewer"] }).notNull(),
+  status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const grants = pgTable(
+  "grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    bucket: text("bucket").notNull(),
+    prefix: text("prefix").notNull().default(""),
+  },
+  (t) => ({
+    byUser: index("grants_user_idx").on(t.userId),
+  }),
+);
+
+export const shares = pgTable(
+  "shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: text("token_hash").notNull().unique(),
+    bucket: text("bucket").notNull(),
+    key: text("key").notNull(),
+    passwordHash: text("password_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    maxDownloads: integer("max_downloads"),
+    reservedDownloads: integer("reserved_downloads").notNull().default(0),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    deliveryMode: text("delivery_mode", { enum: ["stream", "redirect"] }).notNull().default("stream"),
+    inlinePreview: boolean("inline_preview").notNull().default(false),
+    createdBy: uuid("created_by").notNull().references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byBucketKey: index("shares_bucket_key_idx").on(t.bucket, t.key),
+  }),
+);
+
+export const shareTransfers = pgTable("share_transfers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  shareId: uuid("share_id").notNull().references(() => shares.id, { onDelete: "cascade" }),
+  reservedAt: timestamp("reserved_at", { withTimezone: true }).notNull().defaultNow(),
+  status: text("status", { enum: ["reserved", "completed", "failed"] }).notNull().default("reserved"),
+});
+
+export const uploadSessions = pgTable("upload_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id),
+  bucket: text("bucket").notNull(),
+  key: text("key").notNull(),
+  r2UploadId: text("r2_upload_id").notNull(),
+  size: integer("size").notNull(),
+  partSize: integer("part_size").notNull(),
+  totalParts: integer("total_parts").notNull(),
+  status: text("status", { enum: ["pending", "completed", "aborted", "expired"] }).notNull().default("pending"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const mailMessages = pgTable("mail_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  externalMessageId: text("external_message_id"),
+  sender: text("sender").notNull(),
+  recipient: text("recipient").notNull(),
+  subject: text("subject"),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  rawObjectKey: text("raw_object_key"),
+  status: text("status", { enum: ["processed", "rejected", "failed"] }).notNull(),
+  reason: text("reason"),
+}, (t) => ({
+  byExternalId: uniqueIndex("mail_messages_external_id_idx").on(t.externalMessageId),
+}));
+
+export const mailAttachments = pgTable("mail_attachments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  messageId: uuid("message_id").notNull().references(() => mailMessages.id, { onDelete: "cascade" }),
+  objectKey: text("object_key").notNull(),
+  displayFilename: text("display_filename").notNull(),
+  mimeType: text("mime_type"),
+  size: integer("size"),
+  status: text("status", { enum: ["stored", "rejected"] }).notNull(),
+});
+
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id").references(() => users.id),
+    action: text("action").notNull(),
+    target: text("target"),
+    outcome: text("outcome", { enum: ["success", "failure"] }).notNull(),
+    correlationId: text("correlation_id").notNull(),
+    details: jsonb("details"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byCreatedAt: index("audit_events_created_at_idx").on(t.createdAt),
+  }),
+);
+
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

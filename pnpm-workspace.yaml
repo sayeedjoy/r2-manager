@@ -1,0 +1,9 @@
+packages:
+  - frontend
+  - server
+  - shared
+  - email-relay
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
