@@ -1,0 +1,30 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { loadConfig, resetConfigForTests } from "../src/config";
+
+const base = {
+  APP_BASE_URL: "http://localhost:5173",
+  DATABASE_URL: "postgres://u:p@localhost:5433/db",
+  R2_ACCOUNT_ID: "local",
+  R2_ACCESS_KEY_ID: "key",
+  R2_SECRET_ACCESS_KEY: "secret",
+  R2_BUCKETS: "bucket",
+  AUTH_MODE: "basic",
+  BASIC_AUTH_USERNAME: "admin",
+  SESSION_SECRET: "0123456789abcdef0123",
+};
+
+afterEach(() => resetConfigForTests());
+
+describe("BASIC_AUTH_PASSWORD_HASH validation", () => {
+  it("refuses to start with a plain password instead of a hash", () => {
+    expect(() => loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "hunter2" })).toThrow(/BASIC_AUTH_PASSWORD_HASH.*hash-password/);
+  });
+
+  it("accepts a scrypt hash from the hash-password script", () => {
+    expect(() => loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234" })).not.toThrow();
+  });
+
+  it("treats a blank optional value as unset", () => {
+    expect(() => loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234", R2_ENDPOINT: "" })).not.toThrow();
+  });
+});

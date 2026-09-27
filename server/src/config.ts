@@ -41,6 +41,14 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           message: "BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD_HASH are required when AUTH_MODE includes 'basic'",
         });
+      } else if (!/^scrypt:[0-9a-f]+:[0-9a-f]+$/.test(env.BASIC_AUTH_PASSWORD_HASH)) {
+        // A plain password or a bcrypt hash here would otherwise boot fine and reject every login.
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["BASIC_AUTH_PASSWORD_HASH"],
+          message:
+            "must be the output of `pnpm --filter server run hash-password '<password>'` (starts with \"scrypt:\"), not the password itself",
+        });
       }
     }
   });
