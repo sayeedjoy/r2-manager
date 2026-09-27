@@ -14,7 +14,9 @@ pnpm workspace (`frontend`, `server` = `@r2-manager/server`, `shared` = `@r2-man
 
 ```bash
 pnpm install
-pnpm dev                 # server on :8787 (tsx watch) + Vite on :5173; Vite proxies /api and /s to :8787
+pnpm services:up         # docker compose: Postgres + MinIO (local R2 stand-in); see docs/local-development.md
+pnpm services:down
+pnpm dev                 # server on :8787 (tsx watch) + Vite on :5173; Vite proxies /api and /s/ to :8787
 pnpm build               # shared typecheck -> frontend build -> server tsc
 pnpm typecheck           # all packages
 pnpm lint                # only frontend has an eslint script
@@ -28,7 +30,8 @@ pnpm --filter server exec vitest run -t "rejects path traversal"
 pnpm db:generate         # after editing server/src/db/schema.ts -> writes server/src/db/migrations/
 pnpm db:migrate
 
-pnpm --filter server run hash-password 'pw'   # bcrypt hash for BASIC_AUTH_PASSWORD_HASH
+pnpm --filter server run hash-password 'pw'   # scrypt hash for BASIC_AUTH_PASSWORD_HASH
+pnpm --filter server run create-admin [identity]   # first admin row; defaults to BASIC_AUTH_USERNAME
 pnpm --filter frontend format                 # prettier (no semicolons, double quotes, tailwind class sorting)
 ```
 
