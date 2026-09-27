@@ -3,14 +3,21 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
+  Download,
+  Eye,
   File as FileIcon,
   FolderOpen,
   FolderPlus,
   FolderUp,
   LayoutGrid,
+  Link2,
   List,
+  Pencil,
   Search,
   SearchX,
+  Tags,
+  TextCursorInput,
+  Trash2,
   TriangleAlert,
   Upload,
   X,
@@ -161,6 +168,10 @@ export function BrowserPage() {
     return parts.join(" · ");
   }, [data]);
 
+  function setAllSelected(checked: boolean) {
+    setSelected(checked ? new Set(filteredEntries.map((e) => e.key)) : new Set());
+  }
+
   function toggleSelect(key: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -286,14 +297,16 @@ export function BrowserPage() {
   }
 
   const actions: FileAction[] = [
-    { label: "Preview", onSelect: (entry) => setPreviewTarget(entry), showFor: (e) => e.type === "file" },
+    { label: "Preview", icon: Eye, onSelect: (entry) => setPreviewTarget(entry), showFor: (e) => e.type === "file" },
     {
       label: "Download",
+      icon: Download,
       onSelect: (entry) => window.open(api.contentUrl(bucket, entry.key), "_blank"),
       showFor: (e) => e.type === "file",
     },
     {
       label: "Edit",
+      icon: Pencil,
       onSelect: (entry) => {
         if (isEditableKind(previewKindFor(entry.key))) setEditTarget(entry);
         else notifyInfo("This file type can't be opened in the text editor");
@@ -302,14 +315,15 @@ export function BrowserPage() {
     },
     {
       label: "Rename",
+      icon: TextCursorInput,
       onSelect: (entry) => {
         setRenameTarget(entry);
         setRenameValue(baseName(entry.key));
       },
     },
-    { label: "Share", onSelect: (entry) => setShareTarget(entry), showFor: (e) => e.type === "file" },
-    { label: "Metadata", onSelect: (entry) => setMetadataTarget(entry), showFor: (e) => e.type === "file" },
-    { label: "Delete", onSelect: (entry) => deleteEntries([entry]), destructive: true },
+    { label: "Share", icon: Link2, onSelect: (entry) => setShareTarget(entry), showFor: (e) => e.type === "file" },
+    { label: "Metadata", icon: Tags, onSelect: (entry) => setMetadataTarget(entry), showFor: (e) => e.type === "file" },
+    { label: "Delete", icon: Trash2, onSelect: (entry) => deleteEntries([entry]), destructive: true },
   ];
 
   const folderName = splat ? splat.split("/").pop()! : bucket;
@@ -371,10 +385,17 @@ export function BrowserPage() {
     );
   } else if (view === "list") {
     listing = (
-      <FileTable entries={filteredEntries} selected={selected} onToggleSelect={toggleSelect} onOpen={handleOpen} actions={actions} />
+      <FileTable
+        entries={filteredEntries}
+        selected={selected}
+        onToggleSelect={toggleSelect}
+        onSelectAll={setAllSelected}
+        onOpen={handleOpen}
+        actions={actions}
+      />
     );
   } else {
-    listing = <FileGrid entries={filteredEntries} selected={selected} onToggleSelect={toggleSelect} onOpen={handleOpen} />;
+    listing = <FileGrid bucket={bucket} entries={filteredEntries} selected={selected} onToggleSelect={toggleSelect} onOpen={handleOpen} />;
   }
 
   return (
