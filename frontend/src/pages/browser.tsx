@@ -128,22 +128,6 @@ export function BrowserPage() {
     refresh();
   }
 
-  async function handleDelete(entry: ObjectEntry) {
-    const ok = await confirm({
-      title: `Delete "${baseName(entry.key)}"?`,
-      description: "This can't be undone.",
-      confirmLabel: "Delete",
-      destructive: true,
-    });
-    if (!ok) return;
-    try {
-      await api.deleteObjects(bucket, [entry.key]);
-    } catch (err) {
-      notifyError("Couldn't delete", err);
-    }
-    refresh();
-  }
-
   async function handleRenameConfirm() {
     if (!renameTarget || !renameValue.trim()) return;
     try {
@@ -156,20 +140,22 @@ export function BrowserPage() {
     refresh();
   }
 
-  /** FILE-05/FILE-07: bulk delete, confirming exactly what will be affected; folders run as tree-op batches. */
-  async function handleBulkDelete() {
-    const count = selectedEntries.length;
+  /**
+   * FILE-05/FILE-07: deletes files and folders after confirming exactly what will be affected. Folders run as
+   * cursor-batched tree ops, because deleting a folder's own key only removes its placeholder, not its contents.
+   */
+  async function deleteEntries(entries: ObjectEntry[]) {
     const ok = await confirm({
-      title: `Delete ${count} ${count === 1 ? "item" : "items"}?`,
-      description: selectedEntries.some((e) => e.type === "folder")
+      title: entries.length === 1 ? `Delete "${baseName(entries[0].key)}"?` : `Delete ${entries.length} items?`,
+      description: entries.some((e) => e.type === "folder")
         ? "Folders are deleted with everything inside them. This can't be undone."
         : "This can't be undone.",
       confirmLabel: "Delete",
       destructive: true,
     });
     if (!ok) return;
-    const files = selectedEntries.filter((e) => e.type === "file");
-    const folders = selectedEntries.filter((e) => e.type === "folder");
+    const files = entries.filter((e) => e.type === "file");
+    const folders = entries.filter((e) => e.type === "folder");
 
     try {
       if (files.length > 0) await api.deleteObjects(bucket, files.map((e) => e.key));
@@ -227,7 +213,7 @@ export function BrowserPage() {
     },
     { label: "Share", onSelect: (entry) => setShareTarget(entry), showFor: (e) => e.type === "file" },
     { label: "Metadata", onSelect: (entry) => setMetadataTarget(entry), showFor: (e) => e.type === "file" },
-    { label: "Delete", onSelect: handleDelete, destructive: true },
+    { label: "Delete", onSelect: (entry) => deleteEntries([entry]), destructive: true },
   ];
 
   return (
@@ -268,7 +254,7 @@ export function BrowserPage() {
         onDownloadZip={handleBulkDownload}
         onMove={() => setMoveCopyMode("move")}
         onCopy={() => setMoveCopyMode("copy")}
-        onDelete={handleBulkDelete}
+        onDelete={() => deleteEntries(selectedEntries)}
         onClear={() => setSelected(new Set())}
       />
 
