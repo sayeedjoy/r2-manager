@@ -124,7 +124,7 @@ export function FileTable({ entries, selected, onToggleSelect, onOpen, actions }
                         <DropdownMenuItem
                           key={action.label}
                           variant={action.destructive ? "destructive" : "default"}
-                          onSelect={() => action.onSelect(entry)}
+                          onClick={() => action.onSelect(entry)}
                         >
                           {action.label}
                         </DropdownMenuItem>
@@ -137,7 +137,7 @@ export function FileTable({ entries, selected, onToggleSelect, onOpen, actions }
               {actions
                 .filter((action) => !action.showFor || action.showFor(entry))
                 .map((action) => (
-                  <ContextMenuItem key={action.label} variant={action.destructive ? "destructive" : "default"} onSelect={() => action.onSelect(entry)}>
+                  <ContextMenuItem key={action.label} variant={action.destructive ? "destructive" : "default"} onClick={() => action.onSelect(entry)}>
                     {action.label}
                   </ContextMenuItem>
                 ))}
