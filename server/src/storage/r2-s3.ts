@@ -217,12 +217,12 @@ export class R2S3Storage implements Storage {
     partNumber: number,
     expiresInSeconds: number,
   ): Promise<string> {
-    const url = this.urlFor(bucket, key, { partNumber: String(partNumber), uploadId });
-    const signed = await this.client.sign(url, {
-      method: "PUT",
-      aws: { signQuery: true },
-      headers: { "X-Amz-Expires": String(expiresInSeconds) },
+    const url = this.urlFor(bucket, key, {
+      partNumber: String(partNumber),
+      uploadId,
+      "X-Amz-Expires": String(expiresInSeconds),
     });
+    const signed = await this.client.sign(url, { method: "PUT", aws: { signQuery: true } });
     return signed.url;
   }
 
@@ -261,14 +261,13 @@ export class R2S3Storage implements Storage {
     expiresInSeconds: number,
     opts: { responseContentDisposition?: string } = {},
   ): Promise<string> {
-    const query: Record<string, string> = {};
+    // aws4fetch reads the expiry from the query string. Passed as a header it
+    // gets signed as one (the client never sends it, so the signature fails)
+    // and the URL silently falls back to aws4fetch's 24h default.
+    const query: Record<string, string> = { "X-Amz-Expires": String(expiresInSeconds) };
     if (opts.responseContentDisposition) query["response-content-disposition"] = opts.responseContentDisposition;
     const url = this.urlFor(bucket, key, query);
-    const signed = await this.client.sign(url, {
-      method: "GET",
-      aws: { signQuery: true },
-      headers: { "X-Amz-Expires": String(expiresInSeconds) },
-    });
+    const signed = await this.client.sign(url, { method: "GET", aws: { signQuery: true } });
     return signed.url;
   }
 }
