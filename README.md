@@ -4,7 +4,12 @@ A self-hosted file manager for Cloudflare R2 buckets: browsing, uploads, preview
 
 ## Status
 
-Core (P0) surface is implemented: authentication (Cloudflare Access and/or Basic Auth), RBAC, bucket browsing, folder operations, drag-and-drop multipart upload/download, HTTP metadata, protected shares with password/expiry/download-limit, an email inbox with attachment copy-to-folder, admin users/settings/audit/health, and the Postgres schema/migrations for all of it. Format-aware editors, in-browser previews beyond basic download, and the Logpush viewer (P1/P2 in the SRS) are not yet built out in the frontend.
+Both release stages from the SRS's release plan (§9) are implemented:
+
+- **Core:** authentication (Cloudflare Access and/or Basic Auth), RBAC, bucket browsing (list/grid, name filter), folder operations, drag-and-drop multipart upload/download, previews (PDF/image/text/Markdown/CSV/JSON/JSONL), object operations, and the audit trail.
+- **Complete feature set:** folder upload (drag-and-drop and picker, preserving hierarchy), bulk move/copy/delete/download-as-zip, a metadata editor, an in-browser text/Markdown/CSV/JSON editor with ETag conflict detection, protected shares with password/expiry/download-limit and a revoke UI, Email Routing ingestion with an attachment inbox, and admin settings/users/grants/audit/health.
+
+**Later enhancements** (SRS §9, explicitly out of scope for now): soft delete/retention policies, full-text/advanced search, malware scanning, and format-aware editors (CSV table editing, diff-before-save).
 
 ## Local development
 
