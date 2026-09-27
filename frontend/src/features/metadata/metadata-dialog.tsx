@@ -1,18 +1,22 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Plus, Trash2, TriangleAlert } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
 import { baseName } from "@r2-manager/shared";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { api, ApiError } from "@/lib/api";
 
 interface MetadataDialogProps {
@@ -55,7 +59,8 @@ export function MetadataDialog({ bucket, entry, onClose, onSaved }: MetadataDial
     };
   }, [bucket, entry.key]);
 
-  async function handleSave() {
+  async function handleSave(event: FormEvent) {
+    event.preventDefault();
     if (!etag) return;
     setSaving(true);
     setError(null);
@@ -80,93 +85,120 @@ export function MetadataDialog({ bucket, entry, onClose, onSaved }: MetadataDial
     }
   }
 
+  const headerFields = [
+    { id: "meta-content-type", label: "Content-Type", value: contentType, set: setContentType, placeholder: "e.g. application/pdf" },
+    { id: "meta-disposition", label: "Content-Disposition", value: contentDisposition, set: setContentDisposition, placeholder: "e.g. attachment" },
+    { id: "meta-cache", label: "Cache-Control", value: cacheControl, set: setCacheControl, placeholder: "e.g. public, max-age=3600" },
+    { id: "meta-language", label: "Content-Language", value: contentLanguage, set: setContentLanguage, placeholder: "e.g. en" },
+  ];
+
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Metadata for "{baseName(entry.key)}"</DialogTitle>
-          <DialogDescription className="sr-only">Edit object metadata</DialogDescription>
-        </DialogHeader>
+        <form onSubmit={handleSave} className="contents">
+          <DialogHeader>
+            <DialogTitle>Metadata</DialogTitle>
+            <DialogDescription className="truncate">{baseName(entry.key)}</DialogDescription>
+          </DialogHeader>
 
-        {loading && <div className="p-6 text-center text-sm text-muted-foreground">Loading...</div>}
-
-        {!loading && !error && (
-          <div className="space-y-3">
-            {conflict && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2 text-sm text-destructive">
-                This file changed since metadata was loaded. Reload before saving again.
-              </div>
-            )}
-            <div>
-              <Label htmlFor="meta-content-type">Content-Type</Label>
-              <Input id="meta-content-type" value={contentType} onChange={(e) => setContentType(e.target.value)} />
+          {loading && (
+            <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading metadata">
+              {Array.from({ length: 4 }, (_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
             </div>
-            <div>
-              <Label htmlFor="meta-disposition">Content-Disposition</Label>
-              <Input id="meta-disposition" value={contentDisposition} onChange={(e) => setContentDisposition(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="meta-cache">Cache-Control</Label>
-              <Input id="meta-cache" value={cacheControl} onChange={(e) => setCacheControl(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="meta-language">Content-Language</Label>
-              <Input id="meta-language" value={contentLanguage} onChange={(e) => setContentLanguage(e.target.value)} />
-            </div>
-
-            <div>
-              <Label>Custom metadata</Label>
-              <div className="space-y-2">
-                {customMetadata.map((entry, i) => (
-                  <div key={i} className="flex gap-2">
-                    <Input
-                      placeholder="key"
-                      value={entry.key}
-                      onChange={(e) =>
-                        setCustomMetadata((prev) => prev.map((m, j) => (j === i ? { ...m, key: e.target.value } : m)))
-                      }
-                    />
-                    <Input
-                      placeholder="value"
-                      value={entry.value}
-                      onChange={(e) =>
-                        setCustomMetadata((prev) => prev.map((m, j) => (j === i ? { ...m, value: e.target.value } : m)))
-                      }
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Remove field"
-                      onClick={() => setCustomMetadata((prev) => prev.filter((_, j) => j !== i))}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCustomMetadata((prev) => [...prev, { key: "", value: "" }])}
-                >
-                  <Plus className="mr-1 size-4" /> Add field
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {error && <div className="p-4 text-sm text-destructive">{error}</div>}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          {!loading && !error && (
-            <Button onClick={handleSave} disabled={saving || conflict}>
-              {saving ? "Saving..." : "Save"}
-            </Button>
           )}
-        </DialogFooter>
+
+          {conflict && (
+            <Alert variant="destructive">
+              <TriangleAlert />
+              <AlertTitle>This file changed</AlertTitle>
+              <AlertDescription>Someone updated it after you opened this dialog. Close and reopen it to edit the latest version.</AlertDescription>
+            </Alert>
+          )}
+
+          {!loading && !error && (
+            <div className="flex max-h-[60svh] flex-col gap-6 overflow-y-auto">
+              <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                {headerFields.map((f) => (
+                  <Field key={f.id}>
+                    <FieldLabel htmlFor={f.id}>{f.label}</FieldLabel>
+                    <Input
+                      id={f.id}
+                      value={f.value}
+                      placeholder={f.placeholder}
+                      onChange={(e) => f.set(e.target.value)}
+                      autoComplete="off"
+                      className="font-mono text-xs"
+                    />
+                  </Field>
+                ))}
+              </FieldGroup>
+
+              <FieldSet>
+                <FieldLegend variant="label">Custom metadata</FieldLegend>
+                <FieldDescription>Stored as x-amz-meta-* headers on the object.</FieldDescription>
+                <div className="flex flex-col gap-2">
+                  {customMetadata.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        aria-label="Key"
+                        placeholder="key"
+                        value={m.key}
+                        className="font-mono text-xs"
+                        onChange={(e) => setCustomMetadata((prev) => prev.map((row, j) => (j === i ? { ...row, key: e.target.value } : row)))}
+                      />
+                      <Input
+                        aria-label="Value"
+                        placeholder="value"
+                        value={m.value}
+                        className="font-mono text-xs"
+                        onChange={(e) => setCustomMetadata((prev) => prev.map((row, j) => (j === i ? { ...row, value: e.target.value } : row)))}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Remove ${m.key || "field"}`}
+                        onClick={() => setCustomMetadata((prev) => prev.filter((_, j) => j !== i))}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
+                    onClick={() => setCustomMetadata((prev) => [...prev, { key: "", value: "" }])}
+                  >
+                    <Plus data-icon="inline-start" />
+                    Add field
+                  </Button>
+                </div>
+              </FieldSet>
+            </div>
+          )}
+
+          {error && (
+            <Alert variant="destructive">
+              <TriangleAlert />
+              <AlertTitle>Couldn't load or save metadata</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" disabled={saving} />}>Cancel</DialogClose>
+            {!loading && !error && (
+              <Button type="submit" disabled={saving || conflict}>
+                {saving && <Spinner data-icon="inline-start" />}
+                Save
+              </Button>
+            )}
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
