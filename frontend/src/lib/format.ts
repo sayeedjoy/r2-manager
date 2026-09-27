@@ -6,7 +6,10 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /** "5 minutes ago" for the past week, where recency matters, then a plain date. Pair it with formatDateTime in a title. */
 export function formatRelativeDate(iso: string): string {
   const date = new Date(iso);
-  return Date.now() - date.getTime() < WEEK_MS ? formatDistanceToNowStrict(date, { addSuffix: true }) : format(date, "MMM d, yyyy");
+  const age = Date.now() - date.getTime();
+  // Clock skew between server and browser can make a brand-new timestamp land slightly in the future.
+  if (Math.abs(age) < 10_000) return "just now";
+  return age < WEEK_MS ? formatDistanceToNowStrict(date, { addSuffix: true }) : format(date, "MMM d, yyyy");
 }
 
 export function formatDateTime(iso: string): string {
