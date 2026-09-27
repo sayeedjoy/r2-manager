@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { FolderPlus, Upload } from "lucide-react";
+import { FolderPlus, FolderUp, Upload } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
-import { baseName, isEditableKind, previewKindFor } from "@r2-manager/shared";
+import { baseName, InvalidKeyError, isEditableKind, normalizeKey, previewKindFor } from "@r2-manager/shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { useListing } from "@/hooks/use-listing";
 import { useUploadQueue } from "@/features/upload/upload-queue";
 import { DropZone } from "@/features/upload/drop-zone";
+import type { DroppedFile } from "@/features/upload/file-system-entries";
 import { FileBreadcrumbs } from "@/features/files/breadcrumbs";
 import { FileTable, type FileAction } from "@/features/files/file-table";
 import { ShareDialog } from "@/features/shares/share-dialog";
@@ -31,6 +32,7 @@ export function BrowserPage() {
   const qc = useQueryClient();
   const { enqueue } = useUploadQueue();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, error } = useListing(bucket, prefix);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -54,9 +56,20 @@ export function BrowserPage() {
     }
   }
 
-  function handleFiles(files: File[]) {
-    for (const file of files) {
-      enqueue(file, bucket, `${prefix}${file.name}`, refresh);
+  /** XFER-01/02: uploads dropped/selected files, preserving folder structure when present; rejects unsafe paths. */
+  function handleFiles(files: DroppedFile[]) {
+    for (const { file, relativePath } of files) {
+      let key: string;
+      try {
+        key = normalizeKey(`${prefix}${relativePath}`);
+      } catch (err) {
+        if (err instanceof InvalidKeyError) {
+          alert(`Skipped "${relativePath}": ${err.message}`);
+          continue;
+        }
+        throw err;
+      }
+      enqueue(file, bucket, key, refresh);
     }
   }
 
@@ -115,13 +128,21 @@ export function BrowserPage() {
           <Button variant="outline" size="sm" onClick={() => setNewFolderOpen(true)}>
             <FolderPlus className="mr-1 size-4" /> New folder
           </Button>
+          <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()}>
+            <FolderUp className="mr-1 size-4" /> Upload folder
+          </Button>
           <Button size="sm" onClick={() => fileInputRef.current?.click()}>
             <Upload className="mr-1 size-4" /> Upload
           </Button>
         </div>
       </div>
 
-      <DropZone onFiles={handleFiles} pickerRef={fileInputRef} className="min-h-0 flex-1 rounded-md border">
+      <DropZone
+        onFiles={handleFiles}
+        pickerRef={fileInputRef}
+        folderPickerRef={folderInputRef}
+        className="min-h-0 flex-1 rounded-md border"
+      >
         {isLoading && <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>}
         {error && <div className="p-8 text-center text-sm text-destructive">Failed to load this folder.</div>}
         {data && (
