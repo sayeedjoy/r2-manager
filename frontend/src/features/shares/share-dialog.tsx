@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Lock, Trash2 } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
 import { baseName } from "@r2-manager/shared";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -6,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 
 interface ShareDialogProps {
@@ -14,8 +17,14 @@ interface ShareDialogProps {
   onClose: () => void;
 }
 
-/** SHARE-01: create a revocable link with optional password, expiry, and download limit. */
+/** SHARE-01/05: create a revocable link with optional password/expiry/download limit, and manage existing ones. */
 export function ShareDialog({ bucket, entry, onClose }: ShareDialogProps) {
+  const qc = useQueryClient();
+  const sharesQuery = useQuery({
+    queryKey: ["shares", bucket, entry.key],
+    queryFn: () => api.listShares(bucket, entry.key),
+  });
+
   const [password, setPassword] = useState("");
   const [expiryHours, setExpiryHours] = useState("168");
   const [maxDownloads, setMaxDownloads] = useState("");
@@ -35,27 +44,58 @@ export function ShareDialog({ bucket, entry, onClose }: ShareDialogProps) {
         inlinePreview,
       });
       setUrl(result.url);
+      qc.invalidateQueries({ queryKey: ["shares", bucket, entry.key] });
     } finally {
       setBusy(false);
     }
   }
 
+  async function handleRevoke(shareId: string) {
+    if (!confirm("Revoke this share link? Anyone holding it will immediately lose access.")) return;
+    await api.revokeShare(shareId);
+    qc.invalidateQueries({ queryKey: ["shares", bucket, entry.key] });
+  }
+
+  const activeShares = (sharesQuery.data?.shares ?? []).filter((s) => !s.revokedAt);
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Share "{baseName(entry.key)}"</DialogTitle>
         </DialogHeader>
 
+        {activeShares.length > 0 && (
+          <div className="space-y-2">
+            <Label>Active links</Label>
+            {activeShares.map((share) => (
+              <div key={share.id} className="flex items-center justify-between rounded-md border p-2 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {share.hasPassword && (
+                    <Badge variant="secondary">
+                      <Lock className="mr-1 size-3" /> Password
+                    </Badge>
+                  )}
+                  <span className="text-muted-foreground">
+                    {share.maxDownloads ? `${share.reservedDownloads}/${share.maxDownloads} downloads` : `${share.reservedDownloads} downloads`}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {share.expiresAt ? `expires ${new Date(share.expiresAt).toLocaleString()}` : "no expiry"}
+                  </span>
+                </div>
+                <Button variant="ghost" size="icon" aria-label="Revoke" onClick={() => handleRevoke(share.id)}>
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {url ? (
           <div className="space-y-2">
-            <Label>Link (shown only once)</Label>
+            <Label>New link (shown only once)</Label>
             <Input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigator.clipboard.writeText(url)}
-            >
+            <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(url)}>
               Copy link
             </Button>
           </div>
