@@ -16,7 +16,7 @@ Both release stages from the SRS's release plan (§9) are implemented:
 ```bash
 pnpm install
 cp .env.example .env
-pnpm services:up                                          # Postgres + MinIO (S3-compatible R2 stand-in) via Docker
+pnpm services:up                                          # Postgres + SeaweedFS (S3-compatible R2 stand-in) via Docker
 pnpm --filter server run hash-password 'your-password'   # paste result into BASIC_AUTH_PASSWORD_HASH
 pnpm db:migrate
 pnpm --filter server run create-admin                     # first admin; defaults to BASIC_AUTH_USERNAME

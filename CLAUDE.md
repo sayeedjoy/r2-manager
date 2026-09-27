@@ -14,7 +14,7 @@ pnpm workspace (`frontend`, `server` = `@r2-manager/server`, `shared` = `@r2-man
 
 ```bash
 pnpm install
-pnpm services:up         # docker compose: Postgres + MinIO (local R2 stand-in); see docs/local-development.md
+pnpm services:up         # docker compose: Postgres (host port 5433) + SeaweedFS S3 on :8333; see docs/local-development.md
 pnpm services:down
 pnpm dev                 # server on :8787 (tsx watch) + Vite on :5173; Vite proxies /api and /s/ to :8787
 pnpm build               # shared typecheck -> frontend build -> server tsc

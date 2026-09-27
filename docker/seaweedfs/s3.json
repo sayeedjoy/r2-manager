@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "r2manager",
+      "credentials": [{ "accessKey": "r2manager", "secretKey": "r2manager-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

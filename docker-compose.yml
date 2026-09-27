@@ -1,6 +1,9 @@
 # Local development dependencies. The app itself runs on the host with
-# `pnpm dev` (hot reload); this provides Postgres and MinIO, an
+# `pnpm dev` (hot reload); this provides Postgres and SeaweedFS, an
 # S3-compatible stand-in for R2. See docs/local-development.md.
+#
+# SeaweedFS rather than MinIO: MinIO stopped publishing community images, so
+# minio/minio and minio/mc can no longer be pulled.
 name: r2-manager
 
 services:
@@ -11,7 +14,8 @@ services:
       POSTGRES_PASSWORD: r2manager
       POSTGRES_DB: r2manager
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # 5433 on the host so it doesn't collide with a locally installed Postgres on 5432.
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -20,39 +24,34 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: r2manager
-      MINIO_ROOT_PASSWORD: r2manager-secret
-      # The app signs requests for region "auto", as R2 expects.
-      MINIO_SITE_REGION: auto
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.47
+    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${S3_PORT:-8333}:8333" # S3 API (R2_ENDPOINT)
+      - "${FILER_PORT:-8888}:8888" # filer web UI for browsing stored objects
     volumes:
-      - minio-data:/data
+      - seaweedfs-data:/data
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # 127.0.0.1, not localhost: localhost resolves to ::1 first, which S3 doesn't bind.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
-  # One-shot: creates the dev bucket, then exits.
-  minio-init:
-    image: minio/mc:latest
+  # One-shot: creates the dev bucket, then exits. Safe to rerun.
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:4.47
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
     entrypoint:
       - /bin/sh
       - -c
-      - |
-        mc alias set local http://minio:9000 r2manager r2manager-secret &&
-        mc mb --ignore-existing local/r2-manager-dev
+      - echo "s3.bucket.create -name r2-manager-dev" | weed shell -master=seaweedfs:9333
     restart: "no"
 
 volumes:
   postgres-data:
-  minio-data:
+  seaweedfs-data:
