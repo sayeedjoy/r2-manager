@@ -17,6 +17,7 @@ export function AdminSettingsPage() {
         maxUploadSizeBytes: String(data.maxUploadSizeBytes),
         maxPreviewSizeBytes: String(data.maxPreviewSizeBytes),
         maxEditorSizeBytes: String(data.maxEditorSizeBytes),
+        maxBulkDownloadBytes: String(data.maxBulkDownloadBytes),
         defaultShareExpiryHours: data.defaultShareExpiryHours ? String(data.defaultShareExpiryHours) : "",
         defaultShareMaxDownloads: data.defaultShareMaxDownloads ? String(data.defaultShareMaxDownloads) : "",
       });
@@ -28,6 +29,7 @@ export function AdminSettingsPage() {
       maxUploadSizeBytes: Number(form.maxUploadSizeBytes),
       maxPreviewSizeBytes: Number(form.maxPreviewSizeBytes),
       maxEditorSizeBytes: Number(form.maxEditorSizeBytes),
+      maxBulkDownloadBytes: Number(form.maxBulkDownloadBytes),
       defaultShareExpiryHours: form.defaultShareExpiryHours ? Number(form.defaultShareExpiryHours) : null,
       defaultShareMaxDownloads: form.defaultShareMaxDownloads ? Number(form.defaultShareMaxDownloads) : null,
     });
@@ -39,6 +41,7 @@ export function AdminSettingsPage() {
     { key: "maxUploadSizeBytes", label: "Max upload size (bytes)" },
     { key: "maxPreviewSizeBytes", label: "Max preview size (bytes)" },
     { key: "maxEditorSizeBytes", label: "Max editor size (bytes)" },
+    { key: "maxBulkDownloadBytes", label: "Max bulk download size (bytes)" },
     { key: "defaultShareExpiryHours", label: "Default share expiry (hours)" },
     { key: "defaultShareMaxDownloads", label: "Default share max downloads" },
   ];

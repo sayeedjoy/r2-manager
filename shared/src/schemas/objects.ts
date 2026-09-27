@@ -29,6 +29,22 @@ export const deleteObjectsSchema = z.object({
   keys: z.array(z.string().min(1)).min(1).max(1000),
 });
 
+export const updateContentSchema = z.object({
+  bucket: z.string().min(1),
+  key: z.string().min(1),
+  ifMatch: z.string().min(1),
+  content: z.string(),
+  contentType: z.string().max(255).optional(),
+});
+export type UpdateContentRequest = z.infer<typeof updateContentSchema>;
+
+export const zipObjectsSchema = z.object({
+  bucket: z.string().min(1),
+  keys: z.array(z.string().min(1)).min(1).max(1000),
+  archiveName: z.string().min(1).max(255).default("download.zip"),
+});
+export type ZipObjectsRequest = z.infer<typeof zipObjectsSchema>;
+
 export const treeOperationSchema = z.object({
   op: z.enum(["copy", "move", "delete"]),
   sourceBucket: z.string().min(1),

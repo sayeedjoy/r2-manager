@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   allowedUploadTypes: null, // null = no restriction
   maxPreviewSizeBytes: 25 * 1024 * 1024,
   maxEditorSizeBytes: 2 * 1024 * 1024,
+  maxBulkDownloadBytes: 500 * 1024 * 1024,
   defaultShareExpiryHours: 24 * 7,
   defaultShareMaxDownloads: null,
 };

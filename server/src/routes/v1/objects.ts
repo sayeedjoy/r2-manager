@@ -1,16 +1,21 @@
 import { Hono } from "hono";
 import {
+  AppError,
   copyObjectSchema,
   deleteObjectsSchema,
   listObjectsQuerySchema,
   moveObjectSchema,
   renameObjectSchema,
+  updateContentSchema,
+  zipObjectsSchema,
 } from "@r2-manager/shared";
 import type { HonoEnv } from "../../types";
 import { assertBucketConfigured } from "../../config";
 import { requireCapability } from "../../services/authz";
 import { listFolder, copyObject as copyObjectSvc, moveObject as moveObjectSvc, renameObject as renameObjectSvc, deleteObjects } from "../../services/objects";
 import { recordAudit } from "../../services/audit";
+import { getSettings } from "../../services/settings";
+import { buildZipStream } from "../../services/archive";
 
 const app = new Hono<HonoEnv>();
 
@@ -134,6 +139,87 @@ app.post("/delete", async (c) => {
     details: { keys: body.keys },
   });
   return c.json({ deleted: body.keys });
+});
+
+/** EDIT-02: saves editor content, guarded by an If-Match ETag so a concurrent change is reported instead of silently overwritten. */
+app.put("/content", async (c) => {
+  const body = updateContentSchema.parse(await c.req.json());
+  const { config, db, user, storage } = c.var;
+  assertBucketConfigured(config, body.bucket);
+  await requireCapability(db, user, "object:write", { bucket: body.bucket, key: body.key });
+
+  const settings = await getSettings(db);
+  const bytes = new TextEncoder().encode(body.content);
+  if (bytes.byteLength > settings.maxEditorSizeBytes) {
+    throw new AppError("PAYLOAD_TOO_LARGE", `Content exceeds the configured editor limit of ${settings.maxEditorSizeBytes} bytes`);
+  }
+
+  const current = await storage.head(body.bucket, body.key);
+  if (!current) throw new AppError("NOT_FOUND", "Object not found");
+  if (current.etag !== body.ifMatch) {
+    throw new AppError("PRECONDITION_FAILED", "The file changed since it was loaded; reload and try again");
+  }
+
+  const { etag } = await storage.put(body.bucket, body.key, bytes, {
+    contentType: body.contentType ?? current.contentType,
+    contentDisposition: current.contentDisposition,
+    cacheControl: current.cacheControl,
+    contentLanguage: current.contentLanguage,
+    customMetadata: current.customMetadata,
+  });
+
+  await recordAudit(db, {
+    actorId: user.id,
+    action: "object.edit",
+    target: `${body.bucket}/${body.key}`,
+    outcome: "success",
+    correlationId: c.get("correlationId"),
+    details: { size: bytes.byteLength },
+  });
+
+  return c.json({ bucket: body.bucket, key: body.key, etag, size: bytes.byteLength });
+});
+
+/** XFER-06: bulk download as a generated archive, bounded by the configured size limit. */
+app.post("/zip", async (c) => {
+  const body = zipObjectsSchema.parse(await c.req.json());
+  const { config, db, user, storage } = c.var;
+  assertBucketConfigured(config, body.bucket);
+  for (const key of body.keys) {
+    await requireCapability(db, user, "object:read", { bucket: body.bucket, key });
+  }
+
+  const settings = await getSettings(db);
+  const heads = await Promise.all(body.keys.map((key) => storage.head(body.bucket, key)));
+  const missing = body.keys.filter((_, i) => !heads[i]);
+  if (missing.length > 0) throw new AppError("NOT_FOUND", `Not found: ${missing.join(", ")}`);
+
+  const totalBytes = heads.reduce((sum, h) => sum + (h?.size ?? 0), 0);
+  if (totalBytes > settings.maxBulkDownloadBytes) {
+    throw new AppError(
+      "PAYLOAD_TOO_LARGE",
+      `Selection is ${totalBytes} bytes, over the configured bulk-download limit of ${settings.maxBulkDownloadBytes}. Download files individually instead.`,
+    );
+  }
+
+  const zipBytes = await buildZipStream(storage, body.bucket, body.keys);
+
+  await recordAudit(db, {
+    actorId: user.id,
+    action: "object.bulk-download",
+    target: body.bucket,
+    outcome: "success",
+    correlationId: c.get("correlationId"),
+    details: { keys: body.keys, totalBytes },
+  });
+
+  return new Response(zipBytes, {
+    headers: {
+      "content-type": "application/zip",
+      "content-disposition": `attachment; filename="${body.archiveName}"`,
+      "content-length": String(zipBytes.byteLength),
+    },
+  });
 });
 
 export default app;

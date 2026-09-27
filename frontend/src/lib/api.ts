@@ -66,6 +66,45 @@ export const api = {
   deleteObjects: (bucket: string, keys: string[]) =>
     request("/api/v1/objects/delete", { method: "POST", body: json({ bucket, keys }) }),
 
+  getContent: async (bucket: string, key: string): Promise<string> => {
+    const res = await fetch(`/api/v1/objects/content?${new URLSearchParams({ bucket, key }).toString()}`, {
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiErrorBody | null;
+      if (body?.error) throw new ApiError(body, res.status);
+      throw new Error(`Request failed with status ${res.status}`);
+    }
+    return res.text();
+  },
+
+  updateContent: (body: { bucket: string; key: string; ifMatch: string; content: string; contentType?: string }) =>
+    request<{ bucket: string; key: string; etag: string; size: number }>("/api/v1/objects/content", {
+      method: "PUT",
+      body: json(body),
+    }),
+
+  downloadZip: async (bucket: string, keys: string[], archiveName = "download.zip"): Promise<void> => {
+    const res = await fetch("/api/v1/objects/zip", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: json({ bucket, keys, archiveName }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiErrorBody | null;
+      if (body?.error) throw new ApiError(body, res.status);
+      throw new Error(`Request failed with status ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = archiveName;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   treeOp: (body: {
     op: "copy" | "move" | "delete";
     sourceBucket: string;

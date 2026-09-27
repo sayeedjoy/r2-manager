@@ -29,6 +29,7 @@ export const appSettingsSchema = z.object({
   allowedUploadTypes: z.array(z.string()).nullable(),
   maxPreviewSizeBytes: z.number().int().positive(),
   maxEditorSizeBytes: z.number().int().positive(),
+  maxBulkDownloadBytes: z.number().int().positive(),
   defaultShareExpiryHours: z.number().int().positive().nullable(),
   defaultShareMaxDownloads: z.number().int().positive().nullable(),
 });
