@@ -14,7 +14,9 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://localhost:8787",
-      "/s": "http://localhost:8787",
+      // A bare "/s" prefix would also match "/src/*" (Vite's own module
+      // requests) by string prefix, so anchor it to the share route only.
+      "^/s/": "http://localhost:8787",
     },
   },
 })
