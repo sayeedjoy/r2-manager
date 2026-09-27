@@ -48,8 +48,14 @@ export function ShareDialog({ bucket, entry, onClose }: ShareDialogProps) {
   });
 
   const [password, setPassword] = useState("");
-  const [expiryHours, setExpiryHours] = useState("168");
-  const [maxDownloads, setMaxDownloads] = useState("");
+  // ADMIN-02: the admin-configured share defaults prefill the form. Until the user edits a field it tracks them,
+  // and if they can't be loaded it falls back to a week with no download limit.
+  const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: api.getAppSettings, staleTime: 60_000 });
+  const defaults = settingsQuery.data;
+  const [expiryEdit, setExpiryHours] = useState<string | null>(null);
+  const [maxDownloadsEdit, setMaxDownloads] = useState<string | null>(null);
+  const expiryHours = expiryEdit ?? (defaults ? String(defaults.defaultShareExpiryHours ?? "") : "168");
+  const maxDownloads = maxDownloadsEdit ?? (defaults ? String(defaults.defaultShareMaxDownloads ?? "") : "");
   const [inlinePreview, setInlinePreview] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -204,7 +210,7 @@ export function ShareDialog({ bucket, entry, onClose }: ShareDialogProps) {
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>{url ? "Done" : "Cancel"}</DialogClose>
             {!url && (
-              <Button type="submit" disabled={busy || passwordTooShort}>
+              <Button type="submit" disabled={busy || passwordTooShort || settingsQuery.isLoading}>
                 {busy && <Spinner data-icon="inline-start" />}
                 Create link
               </Button>

@@ -141,7 +141,11 @@ function SettingsForm({ initial }: { initial: AppSettings }) {
         defaultShareMaxDownloads: form.defaultShareMaxDownloads.trim() ? Number(form.defaultShareMaxDownloads) : null,
       });
       toast.add({ type: "success", title: "Settings saved" });
-      await qc.invalidateQueries({ queryKey: ["admin", "settings"] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["admin", "settings"] }),
+        // The read-only copy other screens use (the share dialog's defaults).
+        qc.invalidateQueries({ queryKey: ["settings"] }),
+      ]);
     } catch (err) {
       notifyError("Couldn't save settings", err);
     } finally {

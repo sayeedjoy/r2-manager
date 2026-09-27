@@ -207,10 +207,7 @@ export const api = {
   abortUpload: (uploadId: string) => request("/api/v1/uploads/abort", { method: "POST", body: json({ uploadId }) }),
 
   /** Read-only limits (preview/editor/upload size ceilings) any authenticated user may read. */
-  getAppSettings: () =>
-    request<{ maxUploadSizeBytes: number; maxPreviewSizeBytes: number; maxEditorSizeBytes: number; maxBulkDownloadBytes: number }>(
-      "/api/v1/settings",
-    ),
+  getAppSettings: () => request<AppSettings>("/api/v1/settings"),
 
   createShare: (body: {
     bucket: string;
