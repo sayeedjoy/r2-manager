@@ -19,7 +19,6 @@ import { useListing } from "@/hooks/use-listing";
 import { useUploadQueue } from "@/features/upload/upload-queue";
 import { DropZone } from "@/features/upload/drop-zone";
 import type { DroppedFile } from "@/features/upload/file-system-entries";
-import { FileBreadcrumbs } from "@/features/files/breadcrumbs";
 import { FileTable, type FileAction } from "@/features/files/file-table";
 import { FileGrid } from "@/features/files/file-grid";
 import { BulkActionsBar } from "@/features/files/bulk-actions-bar";
@@ -187,8 +186,7 @@ export function BrowserPage() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <div className="flex items-center justify-between gap-2">
-        <FileBreadcrumbs bucket={bucket} prefix={prefix} onNavigate={(p) => navigate(`/b/${bucket}/${p.replace(/\/$/, "")}`)} />
+      <div className="flex items-center justify-end gap-2">
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setNewFolderOpen(true)}>
             <FolderPlus className="mr-1 size-4" /> New folder

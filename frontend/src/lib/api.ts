@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ListObjectsResponse, ObjectMetadata, Share, TreeOperationResponse } from "@r2-manager/shared";
+import type { ApiErrorBody, ListObjectsResponse, ObjectMetadata, Role, Share, TreeOperationResponse } from "@r2-manager/shared";
 
 export class ApiError extends Error {
   readonly body: ApiErrorBody;
@@ -28,7 +28,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const json = (body: unknown) => JSON.stringify(body);
 
+export interface Me {
+  id: string;
+  identity: string;
+  displayName: string;
+  role: Role;
+}
+
 export const api = {
+  me: () => request<Me>("/api/v1/me"),
+
   listBuckets: () => request<{ buckets: string[] }>("/api/v1/buckets"),
 
   listObjects: (params: { bucket: string; prefix: string; cursor?: string; limit?: number }) => {
