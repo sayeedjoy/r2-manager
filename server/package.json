@@ -11,7 +11,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "hash-password": "tsx src/scripts/hash-password.ts"
+    "hash-password": "tsx src/scripts/hash-password.ts",
+    "create-admin": "tsx src/scripts/create-admin.ts"
   },
   "dependencies": {
     "@r2-manager/shared": "workspace:*",
