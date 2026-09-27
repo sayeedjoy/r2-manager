@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Files, Inbox, Settings, Users, ScrollText } from "lucide-react";
+import { Files, Inbox, Settings, Users, ScrollText, HeartPulse } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBuckets } from "@/hooks/use-listing";
 
@@ -8,6 +8,7 @@ const navItems = [
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/settings", label: "Settings", icon: Settings },
   { to: "/admin/audit", label: "Audit log", icon: ScrollText },
+  { to: "/admin/health", label: "Health", icon: HeartPulse },
 ];
 
 /** NFR-05: a simple responsive shell - a fixed sidebar on desktop, and the same links work fine on narrow viewports. */

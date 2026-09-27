@@ -6,6 +6,7 @@ import { InboxPage } from "@/pages/inbox";
 import { AdminUsersPage } from "@/pages/admin/users";
 import { AdminSettingsPage } from "@/pages/admin/settings";
 import { AdminAuditPage } from "@/pages/admin/audit";
+import { AdminHealthPage } from "@/pages/admin/health";
 import { UploadQueuePanel } from "@/features/upload/upload-queue-panel";
 
 export function App() {
@@ -19,6 +20,7 @@ export function App() {
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/settings" element={<AdminSettingsPage />} />
           <Route path="/admin/audit" element={<AdminAuditPage />} />
+          <Route path="/admin/health" element={<AdminHealthPage />} />
         </Route>
       </Routes>
       <UploadQueuePanel />

@@ -181,6 +181,7 @@ export const api = {
 
   listUsers: () => request<{ users: any[] }>("/api/v1/admin/users"),
   upsertUser: (body: any) => request("/api/v1/admin/users", { method: "POST", body: json(body) }),
+  disableUser: (id: string) => request(`/api/v1/admin/users/${id}/disable`, { method: "POST" }),
   getSettings: () => request<any>("/api/v1/admin/settings"),
   updateSettings: (body: any) => request("/api/v1/admin/settings", { method: "PUT", body: json(body) }),
   getAudit: () => request<{ events: any[] }>("/api/v1/admin/audit"),
