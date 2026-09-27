@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Upload } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
-import { baseName } from "@r2-manager/shared";
+import { baseName, isEditableKind, previewKindFor } from "@r2-manager/shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +21,8 @@ import { DropZone } from "@/features/upload/drop-zone";
 import { FileBreadcrumbs } from "@/features/files/breadcrumbs";
 import { FileTable, type FileAction } from "@/features/files/file-table";
 import { ShareDialog } from "@/features/shares/share-dialog";
+import { PreviewSheet } from "@/features/preview/preview-sheet";
+import { EditorDialog } from "@/features/editor/editor-dialog";
 
 export function BrowserPage() {
   const { bucket = "", "*": splat = "" } = useParams();
@@ -37,6 +39,8 @@ export function BrowserPage() {
   const [shareTarget, setShareTarget] = useState<ObjectEntry | null>(null);
   const [renameTarget, setRenameTarget] = useState<ObjectEntry | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [previewTarget, setPreviewTarget] = useState<ObjectEntry | null>(null);
+  const [editTarget, setEditTarget] = useState<ObjectEntry | null>(null);
 
   function refresh() {
     qc.invalidateQueries({ queryKey: ["listing", bucket, prefix] });
@@ -46,7 +50,7 @@ export function BrowserPage() {
     if (entry.type === "folder") {
       navigate(`/b/${bucket}/${entry.key.replace(/\/$/, "")}`);
     } else {
-      window.open(api.contentUrl(bucket, entry.key), "_blank");
+      setPreviewTarget(entry);
     }
   }
 
@@ -78,7 +82,20 @@ export function BrowserPage() {
   }
 
   const actions: FileAction[] = [
-    { label: "Download", onSelect: handleOpen },
+    { label: "Preview", onSelect: (entry) => setPreviewTarget(entry), showFor: (e) => e.type === "file" },
+    {
+      label: "Download",
+      onSelect: (entry) => window.open(api.contentUrl(bucket, entry.key), "_blank"),
+      showFor: (e) => e.type === "file",
+    },
+    {
+      label: "Edit",
+      onSelect: (entry) => {
+        if (isEditableKind(previewKindFor(entry.key))) setEditTarget(entry);
+        else alert("This file type isn't supported by the text editor.");
+      },
+      showFor: (e) => e.type === "file",
+    },
     {
       label: "Rename",
       onSelect: (entry) => {
@@ -86,7 +103,7 @@ export function BrowserPage() {
         setRenameValue(baseName(entry.key));
       },
     },
-    { label: "Share", onSelect: (entry) => setShareTarget(entry) },
+    { label: "Share", onSelect: (entry) => setShareTarget(entry), showFor: (e) => e.type === "file" },
     { label: "Delete", onSelect: handleDelete, destructive: true },
   ];
 
@@ -152,6 +169,30 @@ export function BrowserPage() {
 
       {shareTarget && (
         <ShareDialog bucket={bucket} entry={shareTarget} onClose={() => setShareTarget(null)} />
+      )}
+
+      {previewTarget && (
+        <PreviewSheet
+          bucket={bucket}
+          entry={previewTarget}
+          onClose={() => setPreviewTarget(null)}
+          onEdit={() => {
+            setEditTarget(previewTarget);
+            setPreviewTarget(null);
+          }}
+        />
+      )}
+
+      {editTarget && (
+        <EditorDialog
+          bucket={bucket}
+          entry={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            refresh();
+          }}
+        />
       )}
     </div>
   );

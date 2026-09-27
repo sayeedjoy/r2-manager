@@ -12,6 +12,8 @@ export interface FileAction {
   label: string;
   onSelect: (entry: ObjectEntry) => void;
   destructive?: boolean;
+  /** Restricts the action to matching entries (e.g. files only). Shown for everything when omitted. */
+  showFor?: (entry: ObjectEntry) => boolean;
 }
 
 interface FileTableProps {
@@ -116,25 +118,29 @@ export function FileTable({ entries, selected, onToggleSelect, onOpen, actions }
                     <MoreHorizontal className="size-4" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {actions.map((action) => (
-                      <DropdownMenuItem
-                        key={action.label}
-                        variant={action.destructive ? "destructive" : "default"}
-                        onSelect={() => action.onSelect(entry)}
-                      >
-                        {action.label}
-                      </DropdownMenuItem>
-                    ))}
+                    {actions
+                      .filter((action) => !action.showFor || action.showFor(entry))
+                      .map((action) => (
+                        <DropdownMenuItem
+                          key={action.label}
+                          variant={action.destructive ? "destructive" : "default"}
+                          onSelect={() => action.onSelect(entry)}
+                        >
+                          {action.label}
+                        </DropdownMenuItem>
+                      ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TableCell>
             </ContextMenuTrigger>
             <ContextMenuContent>
-              {actions.map((action) => (
-                <ContextMenuItem key={action.label} variant={action.destructive ? "destructive" : "default"} onSelect={() => action.onSelect(entry)}>
-                  {action.label}
-                </ContextMenuItem>
-              ))}
+              {actions
+                .filter((action) => !action.showFor || action.showFor(entry))
+                .map((action) => (
+                  <ContextMenuItem key={action.label} variant={action.destructive ? "destructive" : "default"} onSelect={() => action.onSelect(entry)}>
+                    {action.label}
+                  </ContextMenuItem>
+                ))}
             </ContextMenuContent>
           </ContextMenu>
         ))}

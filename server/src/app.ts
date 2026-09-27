@@ -20,6 +20,7 @@ import folders from "./routes/v1/folders";
 import uploads from "./routes/v1/uploads";
 import metadata from "./routes/v1/metadata";
 import shareRoutes from "./routes/v1/shares";
+import settingsRoutes from "./routes/v1/settings";
 import mail from "./routes/v1/mail";
 import admin from "./routes/v1/admin";
 import internal from "./routes/v1/internal";
@@ -77,6 +78,7 @@ export function createApp(opts: CreateAppOptions) {
   api.route("/uploads", uploads);
   api.route("/metadata", metadata);
   api.route("/shares", shareRoutes);
+  api.route("/settings", settingsRoutes);
   api.route("/mail", mail);
   api.route("/admin", admin);
   app.route("/api/v1", api);
