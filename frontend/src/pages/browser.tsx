@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { FolderPlus, FolderUp, Upload } from "lucide-react";
+import { FolderPlus, FolderUp, LayoutGrid, List, Upload } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
 import { baseName, InvalidKeyError, isEditableKind, normalizeKey, previewKindFor } from "@r2-manager/shared";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,9 @@ import { DropZone } from "@/features/upload/drop-zone";
 import type { DroppedFile } from "@/features/upload/file-system-entries";
 import { FileBreadcrumbs } from "@/features/files/breadcrumbs";
 import { FileTable, type FileAction } from "@/features/files/file-table";
+import { FileGrid } from "@/features/files/file-grid";
+import { BulkActionsBar } from "@/features/files/bulk-actions-bar";
+import { MoveCopyDialog } from "@/features/files/move-copy-dialog";
 import { ShareDialog } from "@/features/shares/share-dialog";
 import { PreviewSheet } from "@/features/preview/preview-sheet";
 import { EditorDialog } from "@/features/editor/editor-dialog";
@@ -43,9 +46,35 @@ export function BrowserPage() {
   const [renameValue, setRenameValue] = useState("");
   const [previewTarget, setPreviewTarget] = useState<ObjectEntry | null>(null);
   const [editTarget, setEditTarget] = useState<ObjectEntry | null>(null);
+  const [view, setView] = useState<"list" | "grid">("list");
+  const [filter, setFilter] = useState("");
+  const [moveCopyMode, setMoveCopyMode] = useState<"move" | "copy" | null>(null);
 
   function refresh() {
     qc.invalidateQueries({ queryKey: ["listing", bucket, prefix] });
+    setSelected(new Set());
+  }
+
+  const filteredEntries = useMemo(() => {
+    if (!data) return [];
+    if (!filter.trim()) return data.entries;
+    // FILE-02: name filtering within the current (already loaded) location.
+    const needle = filter.trim().toLowerCase();
+    return data.entries.filter((e) => baseName(e.key).toLowerCase().includes(needle));
+  }, [data, filter]);
+
+  const selectedEntries = useMemo(
+    () => filteredEntries.filter((e) => selected.has(e.key)),
+    [filteredEntries, selected],
+  );
+
+  function toggleSelect(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   function handleOpen(entry: ObjectEntry) {
@@ -94,6 +123,39 @@ export function BrowserPage() {
     refresh();
   }
 
+  /** FILE-05/FILE-07: bulk delete, confirming exactly what will be affected; folders run as tree-op batches. */
+  async function handleBulkDelete() {
+    if (!confirm(`Delete ${selectedEntries.length} item(s)? This cannot be undone.`)) return;
+    const files = selectedEntries.filter((e) => e.type === "file");
+    const folders = selectedEntries.filter((e) => e.type === "folder");
+
+    if (files.length > 0) await api.deleteObjects(bucket, files.map((e) => e.key));
+    for (const folder of folders) {
+      let cursor: string | undefined;
+      for (;;) {
+        const result = await api.treeOp({ op: "delete", sourceBucket: bucket, sourcePrefix: folder.key, cursor });
+        if (result.done) break;
+        cursor = result.cursor ?? undefined;
+      }
+      await api.deleteObjects(bucket, [folder.key]); // remove the now-empty folder placeholder itself
+    }
+    refresh();
+  }
+
+  /** XFER-06: bulk download as a zip, within the server's configured size limit. */
+  async function handleBulkDownload() {
+    const files = selectedEntries.filter((e) => e.type === "file");
+    if (files.length === 0) {
+      alert("Select at least one file to download (folders aren't included in bulk downloads).");
+      return;
+    }
+    try {
+      await api.downloadZip(bucket, files.map((e) => e.key));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Bulk download failed.");
+    }
+  }
+
   const actions: FileAction[] = [
     { label: "Preview", onSelect: (entry) => setPreviewTarget(entry), showFor: (e) => e.type === "file" },
     {
@@ -137,6 +199,32 @@ export function BrowserPage() {
         </div>
       </div>
 
+      <div className="flex items-center gap-2">
+        <Input
+          placeholder="Filter this folder..."
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="max-w-xs"
+        />
+        <div className="ml-auto flex gap-1">
+          <Button variant={view === "list" ? "secondary" : "ghost"} size="icon" onClick={() => setView("list")} aria-label="List view">
+            <List className="size-4" />
+          </Button>
+          <Button variant={view === "grid" ? "secondary" : "ghost"} size="icon" onClick={() => setView("grid")} aria-label="Grid view">
+            <LayoutGrid className="size-4" />
+          </Button>
+        </div>
+      </div>
+
+      <BulkActionsBar
+        count={selected.size}
+        onDownloadZip={handleBulkDownload}
+        onMove={() => setMoveCopyMode("move")}
+        onCopy={() => setMoveCopyMode("copy")}
+        onDelete={handleBulkDelete}
+        onClear={() => setSelected(new Set())}
+      />
+
       <DropZone
         onFiles={handleFiles}
         pickerRef={fileInputRef}
@@ -145,15 +233,11 @@ export function BrowserPage() {
       >
         {isLoading && <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>}
         {error && <div className="p-8 text-center text-sm text-destructive">Failed to load this folder.</div>}
-        {data && (
-          <FileTable entries={data.entries} selected={selected} onToggleSelect={(key) => {
-            setSelected((prev) => {
-              const next = new Set(prev);
-              if (next.has(key)) next.delete(key);
-              else next.add(key);
-              return next;
-            });
-          }} onOpen={handleOpen} actions={actions} />
+        {data && view === "list" && (
+          <FileTable entries={filteredEntries} selected={selected} onToggleSelect={toggleSelect} onOpen={handleOpen} actions={actions} />
+        )}
+        {data && view === "grid" && (
+          <FileGrid entries={filteredEntries} selected={selected} onToggleSelect={toggleSelect} onOpen={handleOpen} />
         )}
       </DropZone>
 
@@ -190,6 +274,19 @@ export function BrowserPage() {
 
       {shareTarget && (
         <ShareDialog bucket={bucket} entry={shareTarget} onClose={() => setShareTarget(null)} />
+      )}
+
+      {moveCopyMode && (
+        <MoveCopyDialog
+          mode={moveCopyMode}
+          sourceBucket={bucket}
+          entries={selectedEntries}
+          onClose={() => setMoveCopyMode(null)}
+          onDone={() => {
+            setMoveCopyMode(null);
+            refresh();
+          }}
+        />
       )}
 
       {previewTarget && (
