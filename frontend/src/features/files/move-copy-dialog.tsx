@@ -1,12 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react"
 import { TriangleAlert } from "lucide-react"
 import type { ObjectEntry } from "@r2-manager/shared"
-import {
-  baseName,
-  joinKey,
-  normalizeFolderKey,
-  parentPrefix,
-} from "@r2-manager/shared"
+import { baseName, parentPrefix } from "@r2-manager/shared"
 import {
   Dialog,
   DialogClose,
@@ -31,10 +26,10 @@ import {
   ProgressValue,
 } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
-import { api } from "@/lib/api"
 import { pluralize } from "@/lib/format"
 import { useBuckets } from "@/hooks/use-listing"
 import { FolderPicker } from "./folder-picker"
+import { transferEntries } from "./transfer"
 
 interface MoveCopyDialogProps {
   mode: "move" | "copy"
@@ -46,9 +41,7 @@ interface MoveCopyDialogProps {
 
 /**
  * FILE-04/FILE-05: moves or copies a multi-select of files and folders to a
- * destination bucket/prefix. Files go through objects/move|copy; folders run
- * as cursor-batched tree operations with visible progress (folder ops are
- * not atomic - NFR-09).
+ * destination bucket/prefix, with visible progress (see transfer.ts).
  */
 export function MoveCopyDialog({
   mode,
@@ -92,58 +85,20 @@ export function MoveCopyDialog({
     destBucket === sourceBucket &&
     entries.every((e) => parentPrefix(e.key) === destPrefix)
 
-  async function runFolderOp(entry: ObjectEntry) {
-    let cursor: string | undefined
-    for (;;) {
-      const destFolderPrefix = normalizeFolderKey(
-        joinKey(destPrefix, baseName(entry.key))
-      )
-      const result = await api.treeOp({
-        op: mode,
-        sourceBucket,
-        sourcePrefix: entry.key,
-        destBucket,
-        destPrefix: destFolderPrefix,
-        onConflict: "rename",
-        cursor,
-      })
-      const failed = result.processed.find((p) => p.status === "failed")
-      if (failed) throw new Error(`Failed on "${failed.key}": ${failed.reason}`)
-      if (result.done) return
-      cursor = result.cursor ?? undefined
-    }
-  }
-
   async function handleConfirm(event: FormEvent) {
     event.preventDefault()
     setBusy(true)
     setError(null)
     setProgress({ done: 0, total: entries.length })
     try {
-      for (const entry of entries) {
-        if (entry.type === "folder") {
-          await runFolderOp(entry)
-        } else {
-          const destKey = joinKey(destPrefix, baseName(entry.key))
-          if (mode === "move")
-            await api.move(
-              sourceBucket,
-              entry.key,
-              destBucket,
-              destKey,
-              "rename"
-            )
-          else
-            await api.copy(
-              sourceBucket,
-              entry.key,
-              destBucket,
-              destKey,
-              "rename"
-            )
-        }
-        setProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev))
-      }
+      await transferEntries({
+        mode,
+        sourceBucket,
+        entries,
+        destBucket,
+        destPrefix,
+        onProgress: (done) => setProgress({ done, total: entries.length }),
+      })
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Operation failed")

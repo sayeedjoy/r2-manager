@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { ObjectEntry } from "@r2-manager/shared";
 import { baseName, previewKindFor } from "@r2-manager/shared";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,6 +8,7 @@ import { FileKindIcon } from "./file-icon";
 
 interface FileGridProps {
   bucket: string;
+  /** Already sorted by the page, in the order the View menu picked. */
   entries: ObjectEntry[];
   selected: Set<string>;
   onToggleSelect: (key: string) => void;
@@ -19,17 +20,9 @@ const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
 
 /** FILE-02: grid view, as an alternative to the list view in file-table.tsx. */
 export function FileGrid({ bucket, entries, selected, onToggleSelect, onOpen }: FileGridProps) {
-  const sorted = useMemo(
-    () =>
-      [...entries].sort((a, b) =>
-        a.type === b.type ? baseName(a.key).localeCompare(baseName(b.key)) : a.type === "folder" ? -1 : 1,
-      ),
-    [entries],
-  );
-
   return (
     <ul className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3 p-3">
-      {sorted.map((entry) => {
+      {entries.map((entry) => {
         const name = baseName(entry.key);
         const isSelected = selected.has(entry.key);
 

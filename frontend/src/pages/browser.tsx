@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
-import { baseName, InvalidKeyError, isEditableKind, normalizeKey, previewKindFor } from "@r2-manager/shared";
+import { baseName, InvalidKeyError, isEditableKind, normalizeKey, parentPrefix, previewKindFor } from "@r2-manager/shared";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
 import {
@@ -47,9 +47,10 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { toast } from "@/components/ui/toast";
+import { toast } from "@/components/toaster";
 import { PageHeader } from "@/components/layout/page-header";
 import { bucketPath } from "@/components/layout/nav";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -59,11 +60,18 @@ import { notifyError, notifyInfo } from "@/lib/notify";
 import { useListing } from "@/hooks/use-listing";
 import { useUploadQueue } from "@/features/upload/upload-queue";
 import { DropZone } from "@/features/upload/drop-zone";
-import type { DroppedFile } from "@/features/upload/file-system-entries";
+import { filesFromDataTransfer, type DroppedFile } from "@/features/upload/file-system-entries";
 import { FileTable, type FileAction } from "@/features/files/file-table";
 import { FileGrid } from "@/features/files/file-grid";
 import { BulkActionsBar } from "@/features/files/bulk-actions-bar";
 import { MoveCopyDialog } from "@/features/files/move-copy-dialog";
+import { useFileClipboard, type FileClipboard } from "@/features/files/file-clipboard";
+import { transferEntries } from "@/features/files/transfer";
+import { FolderCards } from "@/features/files/folder-cards";
+import { fileCategory, TYPE_FILTERS, type TypeFilter } from "@/features/files/file-kind";
+import { nextSort, readViewOptions, sortEntries, writeViewOptions, type ViewOptions } from "@/features/files/view-options";
+import { ViewOptionsPopover } from "@/features/files/view-options-popover";
+import { cn } from "@/lib/utils";
 import { ShareDialog } from "@/features/shares/share-dialog";
 import { PreviewSheet } from "@/features/preview/preview-sheet";
 import { EditorDialog } from "@/features/editor/editor-dialog";
@@ -84,6 +92,13 @@ function readViewPreference(): ViewMode {
 function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || !!target.closest("input, textarea, select"));
 }
+
+/** File shortcuts leave fields, dialogs and menus alone, so their own copy, paste and select-all keep working. */
+function isListingShortcutTarget(target: EventTarget | null): boolean {
+  return !isEditableTarget(target) && !(target instanceof Element && target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]'));
+}
+
+const PASTE_SHORTCUT = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘V" : "Ctrl+V";
 
 export function BrowserPage() {
   const { bucket = "", "*": splat = "" } = useParams();
@@ -108,8 +123,12 @@ export function BrowserPage() {
   const [metadataTarget, setMetadataTarget] = useState<ObjectEntry | null>(null);
   const [view, setView] = useState<ViewMode>(readViewPreference);
   const [filter, setFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [viewOptions, setViewOptions] = useState<ViewOptions>(readViewOptions);
   const [moveCopyMode, setMoveCopyMode] = useState<"move" | "copy" | null>(null);
   const [dialogBusy, setDialogBusy] = useState(false);
+  const [clipboard, setClipboard] = useFileClipboard();
+  const pastingRef = useRef(false);
 
   // Selection and filter belong to one folder. Reset them during render when the folder changes, so the bulk bar
   // never offers to act on rows from the folder the user just left.
@@ -119,6 +138,7 @@ export function BrowserPage() {
     setScope(location);
     setSelected(new Set());
     setFilter("");
+    setTypeFilter("all");
   }
 
   // "/" jumps to the filter, as in most file and code browsers.
@@ -141,18 +161,28 @@ export function BrowserPage() {
     }
   }
 
+  function changeViewOptions(next: ViewOptions) {
+    setViewOptions(next);
+    writeViewOptions(next);
+  }
+
   function refresh() {
     qc.invalidateQueries({ queryKey: ["listing", bucket, prefix] });
     setSelected(new Set());
   }
 
+  // FILE-02: name and type filtering within the current (already loaded) location, in the order the View menu set.
+  // Everything downstream (table, grid, select-all, copy) works on this one list, so they always agree.
   const filteredEntries = useMemo(() => {
     if (!data) return [];
-    if (!filter.trim()) return data.entries;
-    // FILE-02: name filtering within the current (already loaded) location.
     const needle = filter.trim().toLowerCase();
-    return data.entries.filter((e) => baseName(e.key).toLowerCase().includes(needle));
-  }, [data, filter]);
+    const matches = data.entries.filter(
+      (e) =>
+        (!needle || baseName(e.key).toLowerCase().includes(needle)) &&
+        (typeFilter === "all" || fileCategory(e) === typeFilter),
+    );
+    return sortEntries(matches, viewOptions.sort);
+  }, [data, filter, typeFilter, viewOptions.sort]);
 
   const selectedEntries = useMemo(
     () => filteredEntries.filter((e) => selected.has(e.key)),
@@ -207,10 +237,102 @@ export function BrowserPage() {
     }
     if (skipped.length > 0) {
       toast.add({
-        type: "warning",
+        status: "warning",
         title: `Skipped ${skipped.length} ${skipped.length === 1 ? "item" : "items"} with unsafe names`,
         description: skipped.slice(0, 3).join("; ") + (skipped.length > 3 ? "; …" : ""),
       });
+    }
+  }
+
+  // FILE-04: Ctrl/⌘+A selects everything shown, Ctrl/⌘+C or X puts the selection on the in-app clipboard, and
+  // Ctrl/⌘+V pastes it into this folder. Copy and paste use the clipboard events rather than keydown, so they also
+  // follow the platform's own shortcuts and leave copying selected text to the browser.
+  const onSelectAllKey = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key.toLowerCase() !== "a" || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (!isListingShortcutTarget(event.target) || filteredEntries.length === 0) return;
+    event.preventDefault();
+    setAllSelected(true);
+  });
+
+  const onCopyOrCut = useEffectEvent((event: ClipboardEvent) => {
+    if (!isListingShortcutTarget(event.target) || selectedEntries.length === 0) return;
+    if (window.getSelection()?.isCollapsed === false) return; // the user is copying text they highlighted
+    event.preventDefault();
+    const mode = event.type === "cut" ? "move" : "copy";
+    setClipboard({ mode, bucket, entries: selectedEntries });
+    // The system clipboard gets the paths as text, so pasting into a chat or a terminal still does something useful.
+    event.clipboardData?.setData("text/plain", selectedEntries.map((e) => `${bucket}/${e.key}`).join("\n"));
+    notifyInfo(
+      `${mode === "move" ? "Cut" : "Copied"} ${pluralize(selectedEntries.length, "item")}`,
+      `Open the destination folder and press ${PASTE_SHORTCUT} to ${mode === "move" ? "move" : "copy"} ${selectedEntries.length === 1 ? "it" : "them"} there.`,
+    );
+  });
+
+  const onPaste = useEffectEvent((event: ClipboardEvent) => {
+    if (!isListingShortcutTarget(event.target)) return;
+    // Files copied outside the browser (a screenshot, files from Explorer or Finder) upload here, like a drop would.
+    if (event.clipboardData && event.clipboardData.files.length > 0) {
+      event.preventDefault();
+      // Read the entries now: clipboardData is emptied once this handler returns.
+      filesFromDataTransfer(event.clipboardData).then(handleFiles, (err) => notifyError("Couldn't read the pasted files", err));
+      return;
+    }
+    if (!clipboard) return;
+    event.preventDefault();
+    void pasteEntries(clipboard);
+  });
+
+  useEffect(() => {
+    window.addEventListener("keydown", onSelectAllKey);
+    window.addEventListener("copy", onCopyOrCut);
+    window.addEventListener("cut", onCopyOrCut);
+    window.addEventListener("paste", onPaste);
+    return () => {
+      window.removeEventListener("keydown", onSelectAllKey);
+      window.removeEventListener("copy", onCopyOrCut);
+      window.removeEventListener("cut", onCopyOrCut);
+      window.removeEventListener("paste", onPaste);
+    };
+  }, []);
+
+  /** FILE-04/FILE-05: runs a paste. Cut items move here and leave the clipboard; copied ones can be pasted again. */
+  async function pasteEntries(clip: FileClipboard) {
+    if (pastingRef.current) return; // a held-down Ctrl+V would otherwise start the same move several times
+    const sameBucket = clip.bucket === bucket;
+    if (clip.mode === "move" && sameBucket && clip.entries.every((e) => parentPrefix(e.key) === prefix)) {
+      notifyInfo("Already in this folder", "Open another folder to move these items there.");
+      return;
+    }
+    const intoItself = sameBucket && clip.entries.find((e) => e.type === "folder" && prefix.startsWith(e.key));
+    if (intoItself) {
+      notifyError(`Can't paste "${baseName(intoItself.key)}" inside itself`);
+      return;
+    }
+
+    const move = clip.mode === "move";
+    const summary = clip.entries.length === 1 ? `"${baseName(clip.entries[0].key)}"` : pluralize(clip.entries.length, "item");
+    pastingRef.current = true;
+    try {
+      await toast.promise(
+        transferEntries({ mode: clip.mode, sourceBucket: clip.bucket, entries: clip.entries, destBucket: bucket, destPrefix: prefix }),
+        {
+          loading: `${move ? "Moving" : "Copying"} ${summary}…`,
+          success: `${move ? "Moved" : "Copied"} ${summary}`,
+          // NFR-09: tree ops aren't atomic, so some items may already have been transferred.
+          error: (err: unknown) => ({
+            title: `${move ? "Move" : "Copy"} stopped partway`,
+            description: err instanceof Error ? err.message : undefined,
+          }),
+        },
+      );
+      if (move) setClipboard(null);
+    } catch {
+      // The toast already reports the failure; the refresh below shows what made it.
+    } finally {
+      pastingRef.current = false;
+      // A move also changes the folder it came from, so refresh every listing, not just this one.
+      qc.invalidateQueries({ queryKey: ["listing"] });
+      setSelected(new Set());
     }
   }
 
@@ -327,6 +449,7 @@ export function BrowserPage() {
   ];
 
   const folderName = splat ? splat.split("/").pop()! : bucket;
+  const typeFilterLabel = TYPE_FILTERS.find((t) => t.value === typeFilter)?.label ?? "";
 
   let listing;
   if (isLoading) {
@@ -373,26 +496,58 @@ export function BrowserPage() {
           <EmptyMedia variant="icon">
             <SearchX />
           </EmptyMedia>
-          <EmptyTitle>Nothing matches “{filter.trim()}”</EmptyTitle>
-          <EmptyDescription>The filter only searches names in this folder.</EmptyDescription>
+          <EmptyTitle>{filter.trim() ? <>Nothing matches “{filter.trim()}”</> : "Nothing of this type here"}</EmptyTitle>
+          <EmptyDescription>
+            {typeFilter === "all" ? "The search only looks at names in this folder." : `Showing ${typeFilterLabel.toLowerCase()} in this folder only.`}
+          </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button variant="outline" onClick={() => setFilter("")}>
-            Clear filter
+          <Button
+            variant="outline"
+            onClick={() => {
+              setFilter("");
+              setTypeFilter("all");
+            }}
+          >
+            Clear filters
           </Button>
         </EmptyContent>
       </Empty>
     );
   } else if (view === "list") {
+    const folders = filteredEntries.filter((e) => e.type === "folder");
+    // Cards are shortcuts for folders mixed in among files. When the list is all folders, they'd only repeat it.
+    const showFolderCards = folders.length > 0 && folders.length < filteredEntries.length;
     listing = (
-      <FileTable
-        entries={filteredEntries}
-        selected={selected}
-        onToggleSelect={toggleSelect}
-        onSelectAll={setAllSelected}
-        onOpen={handleOpen}
-        actions={actions}
-      />
+      <>
+        {showFolderCards && (
+          <section aria-labelledby="folders-heading" className="flex flex-col gap-2 px-3 pt-3">
+            <h2 id="folders-heading" className="text-xs font-medium text-muted-foreground">
+              Folders
+            </h2>
+            <FolderCards folders={folders} onOpen={handleOpen} />
+          </section>
+        )}
+        <section aria-labelledby={showFolderCards ? "items-heading" : undefined} className={cn(showFolderCards && "pt-4")}>
+          {showFolderCards && (
+            <h2 id="items-heading" className="px-3 pb-1 text-xs font-medium text-muted-foreground">
+              All items
+            </h2>
+          )}
+          <FileTable
+            entries={filteredEntries}
+            selected={selected}
+            onToggleSelect={toggleSelect}
+            onSelectAll={setAllSelected}
+            onOpen={handleOpen}
+            actions={actions}
+            sort={viewOptions.sort}
+            onSort={(column) => changeViewOptions({ ...viewOptions, sort: nextSort(viewOptions.sort, column) })}
+            properties={viewOptions.properties}
+            density={viewOptions.density}
+          />
+        </section>
+      </>
     );
   } else {
     listing = <FileGrid bucket={bucket} entries={filteredEntries} selected={selected} onToggleSelect={toggleSelect} onOpen={handleOpen} />;
@@ -402,7 +557,6 @@ export function BrowserPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
       <PageHeader
         title={folderName}
-        description={summary ?? "Loading…"}
         actions={
           <>
             <Button variant="outline" onClick={() => setNewFolderOpen(true)}>
@@ -437,52 +591,68 @@ export function BrowserPage() {
         }
       />
 
-      <div className="flex items-center gap-2">
-        <InputGroup className="max-w-xs">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            ref={filterInputRef}
-            placeholder="Filter this folder"
-            aria-label="Filter this folder by name"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            onKeyDown={(e) => e.key === "Escape" && setFilter("")}
-          />
-          <InputGroupAddon align="inline-end">
-            {filter ? (
-              <InputGroupButton size="icon-xs" aria-label="Clear filter" onClick={() => setFilter("")}>
-                <X />
-              </InputGroupButton>
-            ) : (
-              <Kbd className="hidden sm:inline-flex">/</Kbd>
-            )}
-          </InputGroupAddon>
-        </InputGroup>
-        <ToggleGroup
-          variant="outline"
-          spacing={0}
-          className="ml-auto"
-          aria-label="Layout"
-          value={[view]}
-          onValueChange={(value) => value[0] && changeView(value[0] as ViewMode)}
-        >
-          <ToggleGroupItem value="list" aria-label="List view">
-            <List />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="grid" aria-label="Grid view">
-            <LayoutGrid />
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+          <p className="mr-auto min-w-0 truncate text-sm text-muted-foreground" aria-live="polite">
+            {summary ?? "Loading…"}
+          </p>
+          <InputGroup className="w-full sm:w-56">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              ref={filterInputRef}
+              placeholder="Search this folder"
+              aria-label="Search this folder by name"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setFilter("")}
+            />
+            <InputGroupAddon align="inline-end">
+              {filter ? (
+                <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setFilter("")}>
+                  <X />
+                </InputGroupButton>
+              ) : (
+                <Kbd className="hidden sm:inline-flex">/</Kbd>
+              )}
+            </InputGroupAddon>
+          </InputGroup>
+          <Select items={TYPE_FILTERS} value={typeFilter} onValueChange={(value) => value && setTypeFilter(value as TypeFilter)}>
+            <SelectTrigger className="w-32" aria-label="Filter by type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false} align="start">
+              <SelectGroup>
+                {TYPE_FILTERS.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <ToggleGroup
+            variant="outline"
+            spacing={0}
+            aria-label="Layout"
+            value={[view]}
+            onValueChange={(value) => value[0] && changeView(value[0] as ViewMode)}
+          >
+            <ToggleGroupItem value="list" aria-label="List view">
+              <List />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="grid" aria-label="Grid view">
+              <LayoutGrid />
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <ViewOptionsPopover options={viewOptions} onChange={changeViewOptions} listView={view === "list"} />
+        </div>
         <DropZone
           onFiles={handleFiles}
           pickerRef={fileInputRef}
           folderPickerRef={folderInputRef}
-          className="flex min-h-0 flex-1 flex-col overflow-auto rounded-xl bg-card ring-1 ring-foreground/10"
+          className="flex min-h-0 flex-1 flex-col overflow-auto"
         >
           {listing}
         </DropZone>

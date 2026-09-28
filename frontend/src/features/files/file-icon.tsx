@@ -4,7 +4,9 @@ import {
   FileArchive,
   FileBraces,
   FileCode,
+  FileHeadphone,
   FileImage,
+  FilePlay,
   FileSpreadsheet,
   FileText,
   FileType,
@@ -12,10 +14,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
-import { baseName, previewKindFor } from "@r2-manager/shared";
+import { fileCategory, fileExtension } from "./file-kind";
 
-const CODE_EXTENSIONS = new Set(["ts", "tsx", "js", "jsx", "mjs", "cjs", "css", "html", "sh", "py", "go", "rs", "sql"]);
-const ARCHIVE_EXTENSIONS = new Set(["zip", "tar", "gz", "tgz", "7z", "rar", "bz2", "xz"]);
+const SPREADSHEET_EXTENSIONS = new Set(["csv", "xls", "xlsx", "ods", "numbers"]);
+const JSON_EXTENSIONS = new Set(["json", "jsonl", "ndjson"]);
 
 /** One outline icon per kind of file, so a listing can be scanned by shape as well as name. */
 export function FileKindIcon({ entry, className }: { entry: ObjectEntry; className?: string }) {
@@ -23,25 +25,26 @@ export function FileKindIcon({ entry, className }: { entry: ObjectEntry; classNa
 }
 
 function fileIconFor(entry: ObjectEntry): LucideIcon {
-  if (entry.type === "folder") return Folder;
-  const name = baseName(entry.key);
-  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
-  if (ARCHIVE_EXTENSIONS.has(ext)) return FileArchive;
-  if (CODE_EXTENSIONS.has(ext)) return FileCode;
+  const ext = fileExtension(entry);
+  if (JSON_EXTENSIONS.has(ext)) return FileBraces;
+  if (SPREADSHEET_EXTENSIONS.has(ext)) return FileSpreadsheet;
+  if (ext === "md" || ext === "markdown") return FileType;
 
-  switch (previewKindFor(entry.key)) {
+  switch (fileCategory(entry)) {
+    case "folder":
+      return Folder;
     case "image":
       return FileImage;
-    case "pdf":
-    case "text":
+    case "video":
+      return FilePlay;
+    case "audio":
+      return FileHeadphone;
+    case "archive":
+      return FileArchive;
+    case "code":
+      return FileCode;
+    case "document":
       return FileText;
-    case "markdown":
-      return FileType;
-    case "csv":
-      return FileSpreadsheet;
-    case "json":
-    case "jsonl":
-      return FileBraces;
     default:
       return File;
   }

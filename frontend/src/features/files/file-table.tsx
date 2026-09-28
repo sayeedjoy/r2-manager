@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, MoreHorizontal, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, EllipsisVertical, type LucideIcon } from "lucide-react";
 import type { ObjectEntry } from "@r2-manager/shared";
 import { baseName } from "@r2-manager/shared";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -25,6 +25,8 @@ import { RelativeTime } from "@/components/relative-time";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FileKindIcon } from "./file-icon";
+import { typeLabel } from "./file-kind";
+import type { Density, DisplayProperty, SortColumn, SortState } from "./view-options";
 
 export interface FileAction {
   label: string;
@@ -36,15 +38,18 @@ export interface FileAction {
 }
 
 interface FileTableProps {
+  /** Already sorted by the page (view-options.ts sortEntries), so the table, grid and folder cards agree. */
   entries: ObjectEntry[];
   selected: Set<string>;
   onToggleSelect: (key: string) => void;
   onSelectAll: (checked: boolean) => void;
   onOpen: (entry: ObjectEntry) => void;
   actions: FileAction[];
+  sort: SortState;
+  onSort: (column: SortColumn) => void;
+  properties: Record<DisplayProperty, boolean>;
+  density: Density;
 }
-
-type SortKey = "name" | "size" | "lastModified";
 
 /** Splits an entry's actions so destructive ones sit in their own group, after a separator. */
 function actionGroups(actions: FileAction[], entry: ObjectEntry): FileAction[][] {
@@ -57,37 +62,30 @@ function actionGroups(actions: FileAction[], entry: ObjectEntry): FileAction[][]
  * context menu, and an always-visible "more actions" menu so the same
  * actions work for touch, keyboard, and assistive technology users.
  */
-export function FileTable({ entries, selected, onToggleSelect, onSelectAll, onOpen, actions }: FileTableProps) {
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<1 | -1>(1);
-
-  const sorted = useMemo(() => {
-    const copy = [...entries];
-    copy.sort((a, b) => {
-      if (sortKey === "size") return ((a.size ?? -1) - (b.size ?? -1)) * sortDir;
-      if (sortKey === "lastModified") return ((a.lastModified ?? "") < (b.lastModified ?? "") ? -1 : 1) * sortDir;
-      return baseName(a.key).localeCompare(baseName(b.key)) * sortDir;
-    });
-    // Folders first regardless of sort column, matching familiar file-manager behavior.
-    copy.sort((a, b) => (a.type === b.type ? 0 : a.type === "folder" ? -1 : 1));
-    return copy;
-  }, [entries, sortKey, sortDir]);
-
-  function toggleSort(key: SortKey) {
-    if (key === sortKey) setSortDir((d) => (d === 1 ? -1 : 1));
-    else {
-      setSortKey(key);
-      setSortDir(1);
-    }
-  }
-
+export function FileTable({
+  entries,
+  selected,
+  onToggleSelect,
+  onSelectAll,
+  onOpen,
+  actions,
+  sort,
+  onSort,
+  properties,
+  density,
+}: FileTableProps) {
   const selectedCount = entries.filter((e) => selected.has(e.key)).length;
   const allSelected = selectedCount === entries.length;
-  const sortProps = { sortKey, sortDir, onSort: toggleSort };
+  const sortProps = { sort, onSort };
 
   return (
     // The Table's own wrapper scrolls horizontally, which would trap the sticky header. Let the listing scroll instead.
-    <div className="[&>[data-slot=table-container]]:overflow-visible">
+    <div
+      className={cn(
+        "[&>[data-slot=table-container]]:overflow-visible",
+        density === "comfortable" && "[&_tbody_td]:py-3.5",
+      )}
+    >
       <Table>
         <TableHeader className="[&_tr]:border-b-0 [&_tr]:hover:bg-transparent">
           <TableRow className="[&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-card [&>th]:shadow-[inset_0_-1px_0_var(--color-border)]">
@@ -100,15 +98,18 @@ export function FileTable({ entries, selected, onToggleSelect, onSelectAll, onOp
               />
             </TableHead>
             <SortableHead label="Name" column="name" {...sortProps} />
-            <SortableHead label="Size" column="size" className="w-24 text-right" alignEnd {...sortProps} />
-            <SortableHead label="Modified" column="lastModified" className="hidden w-36 md:table-cell" {...sortProps} />
+            {properties.type && <SortableHead label="Type" column="type" className="hidden w-28 sm:table-cell" {...sortProps} />}
+            {properties.size && <SortableHead label="Size" column="size" className="w-28" {...sortProps} />}
+            {properties.modified && (
+              <SortableHead label="Modified" column="modified" className="hidden w-36 md:table-cell" {...sortProps} />
+            )}
             <TableHead className="w-12 pr-3">
               <span className="sr-only">Actions</span>
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sorted.map((entry) => {
+          {entries.map((entry) => {
             const name = baseName(entry.key);
             const isSelected = selected.has(entry.key);
             const groups = actionGroups(actions, entry);
@@ -132,19 +133,30 @@ export function FileTable({ entries, selected, onToggleSelect, onSelectAll, onOp
                       className="flex max-w-full items-center gap-2.5 rounded-sm text-left underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
                     >
                       <FileKindIcon entry={entry} className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{name}</span>
+                      <span className="truncate font-medium">{name}</span>
                     </button>
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground tabular-nums">
-                    {entry.type === "file" ? formatBytes(entry.size) : "—"}
-                  </TableCell>
-                  <TableCell className="hidden text-muted-foreground md:table-cell">
-                    {entry.lastModified ? <RelativeTime value={entry.lastModified} /> : "—"}
-                  </TableCell>
+                  {properties.type && (
+                    <TableCell className="hidden sm:table-cell">
+                      <Badge variant="outline" className="rounded-sm px-1.5 text-[0.6875rem] text-muted-foreground">
+                        {typeLabel(entry)}
+                      </Badge>
+                    </TableCell>
+                  )}
+                  {properties.size && (
+                    <TableCell className="text-muted-foreground tabular-nums">
+                      {entry.type === "file" ? formatBytes(entry.size) : "—"}
+                    </TableCell>
+                  )}
+                  {properties.modified && (
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
+                      {entry.lastModified ? <RelativeTime value={entry.lastModified} /> : "—"}
+                    </TableCell>
+                  )}
                   <TableCell className="pr-3 text-right" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${name}`} />}>
-                        <MoreHorizontal />
+                        <EllipsisVertical />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44">
                         {groups.map((group, i) => (
@@ -186,32 +198,29 @@ export function FileTable({ entries, selected, onToggleSelect, onSelectAll, onOp
 
 interface SortableHeadProps {
   label: string;
-  column: SortKey;
-  sortKey: SortKey;
-  sortDir: 1 | -1;
-  onSort: (column: SortKey) => void;
+  column: SortColumn;
+  sort: SortState;
+  onSort: (column: SortColumn) => void;
   className?: string;
-  /** Right-aligned numeric columns put the arrow before the label so the label stays flush with the numbers. */
-  alignEnd?: boolean;
 }
 
-function SortableHead({ label, column, sortKey, sortDir, onSort, className, alignEnd }: SortableHeadProps) {
-  const active = column === sortKey;
-  const Arrow = sortDir === 1 ? ArrowUp : ArrowDown;
+/** Inactive columns show a faint up-down glyph so every header reads as sortable, not just the active one. */
+function SortableHead({ label, column, sort, onSort, className }: SortableHeadProps) {
+  const active = column === sort.column;
+  const Icon = !active ? ChevronsUpDown : sort.dir === 1 ? ArrowUp : ArrowDown;
 
   return (
-    <TableHead className={className} aria-sort={active ? (sortDir === 1 ? "ascending" : "descending") : "none"}>
+    <TableHead className={className} aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
       <button
         type="button"
         onClick={() => onSort(column)}
         className={cn(
-          "inline-flex items-center gap-1 rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
-          !active && "text-muted-foreground",
-          alignEnd && "flex-row-reverse",
+          "group/sort inline-flex items-center gap-1 rounded-sm font-normal text-muted-foreground transition-colors duration-150 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+          active && "text-foreground",
         )}
       >
         {label}
-        <Arrow className={cn("size-3.5", !active && "invisible")} aria-hidden />
+        <Icon className={cn("size-3.5 transition-opacity duration-150", !active && "opacity-50 group-hover/sort:opacity-100")} aria-hidden />
       </button>
     </TableHead>
   );

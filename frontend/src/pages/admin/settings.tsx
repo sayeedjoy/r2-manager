@@ -9,7 +9,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { toast } from "@/components/ui/toast";
+import { toast } from "@/components/toaster";
 import { PageHeader } from "@/components/layout/page-header";
 import { api } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
@@ -140,7 +140,7 @@ function SettingsForm({ initial }: { initial: AppSettings }) {
         defaultShareExpiryHours: form.defaultShareExpiryHours.trim() ? Number(form.defaultShareExpiryHours) : null,
         defaultShareMaxDownloads: form.defaultShareMaxDownloads.trim() ? Number(form.defaultShareMaxDownloads) : null,
       });
-      toast.add({ type: "success", title: "Settings saved" });
+      toast.add({ status: "success", title: "Settings saved" });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["admin", "settings"] }),
         // The read-only copy other screens use (the share dialog's defaults).
