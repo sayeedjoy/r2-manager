@@ -214,7 +214,7 @@ function MessageDialog({ messageId, onClose }: { messageId: string; onClose: () 
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="pr-6">{isLoading ? <Skeleton className="h-5 w-48" /> : (message?.subject ?? "(no subject)")}</DialogTitle>
+          <DialogTitle className="pr-6 wrap-anywhere">{isLoading ? <Skeleton className="h-5 w-48" /> : (message?.subject ?? "(no subject)")}</DialogTitle>
           <DialogDescription>
             {message ? (
               <>
@@ -234,7 +234,7 @@ function MessageDialog({ messageId, onClose }: { messageId: string; onClose: () 
           </Alert>
         )}
 
-        <div className="flex flex-col gap-2">
+        <div className="no-scrollbar -mx-4 flex max-h-[60svh] flex-col gap-2 overflow-y-auto px-4">
           <h3 className="text-sm font-medium">
             Attachments {data && <span className="text-muted-foreground tabular-nums">{data.attachments.length}</span>}
           </h3>
@@ -335,7 +335,7 @@ function CopyAttachmentDialog({ attachment, onClose }: { attachment: MailAttachm
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="copy-bucket">Bucket</FieldLabel>
-              <NativeSelect id="copy-bucket" value={destBucket} onChange={(e) => setDestBucket(e.target.value)}>
+              <NativeSelect id="copy-bucket" className="w-full" value={destBucket} onChange={(e) => setDestBucket(e.target.value)}>
                 {bucketsData?.buckets.map((b) => (
                   <NativeSelectOption key={b} value={b}>
                     {b}

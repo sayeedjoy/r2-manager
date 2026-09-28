@@ -120,7 +120,7 @@ export function MetadataDialog({ bucket, entry, onClose, onSaved }: MetadataDial
           )}
 
           {!loading && !error && (
-            <div className="flex max-h-[60svh] flex-col gap-6 overflow-y-auto">
+            <div className="no-scrollbar -mx-4 flex max-h-[60svh] flex-col gap-6 overflow-y-auto px-4">
               <FieldGroup className="grid gap-4 sm:grid-cols-2">
                 {headerFields.map((f) => (
                   <Field key={f.id}>

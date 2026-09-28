@@ -98,7 +98,9 @@ export function EditorDialog({ bucket, entry, onClose, onSaved }: EditorDialogPr
     <Dialog open onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Edit "{baseName(entry.key)}"</DialogTitle>
+          <DialogTitle className="truncate pr-6" title={baseName(entry.key)}>
+            Edit "{baseName(entry.key)}"
+          </DialogTitle>
           <DialogDescription className="sr-only">Text editor</DialogDescription>
         </DialogHeader>
 

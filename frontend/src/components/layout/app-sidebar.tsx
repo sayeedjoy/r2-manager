@@ -13,7 +13,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSkeleton,
-  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useBuckets } from "@/hooks/use-listing";
@@ -21,7 +20,7 @@ import { useMe } from "@/hooks/use-me";
 import { NAV_SECTIONS, bucketPath, type NavItem } from "./nav";
 import { NavUser } from "./nav-user";
 
-/** NFR-05: collapses to an icon rail on desktop (Ctrl/⌘+B or the rail) and becomes a sheet on mobile. */
+/** NFR-05: collapses to an icon rail on desktop (Ctrl/⌘+B or the header trigger) and becomes a sheet on mobile. */
 export function AppSidebar() {
   const { pathname } = useLocation();
   const { data: me } = useMe();
@@ -64,7 +63,6 @@ export function AppSidebar() {
       <SidebarFooter>
         <NavUser />
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }

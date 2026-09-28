@@ -1,7 +1,12 @@
-import { useState, type FormEvent } from "react";
-import { TriangleAlert } from "lucide-react";
-import type { ObjectEntry } from "@r2-manager/shared";
-import { baseName, joinKey, normalizeFolderKey } from "@r2-manager/shared";
+import { useMemo, useState, type FormEvent } from "react"
+import { TriangleAlert } from "lucide-react"
+import type { ObjectEntry } from "@r2-manager/shared"
+import {
+  baseName,
+  joinKey,
+  normalizeFolderKey,
+  parentPrefix,
+} from "@r2-manager/shared"
 import {
   Dialog,
   DialogClose,
@@ -10,24 +15,33 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
-import { Spinner } from "@/components/ui/spinner";
-import { api } from "@/lib/api";
-import { pluralize } from "@/lib/format";
-import { useBuckets } from "@/hooks/use-listing";
+} from "@/components/ui/dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import {
+  Progress,
+  ProgressLabel,
+  ProgressValue,
+} from "@/components/ui/progress"
+import { Spinner } from "@/components/ui/spinner"
+import { api } from "@/lib/api"
+import { pluralize } from "@/lib/format"
+import { useBuckets } from "@/hooks/use-listing"
+import { FolderPicker } from "./folder-picker"
 
 interface MoveCopyDialogProps {
-  mode: "move" | "copy";
-  sourceBucket: string;
-  entries: ObjectEntry[];
-  onClose: () => void;
-  onDone: () => void;
+  mode: "move" | "copy"
+  sourceBucket: string
+  entries: ObjectEntry[]
+  onClose: () => void
+  onDone: () => void
 }
 
 /**
@@ -36,22 +50,54 @@ interface MoveCopyDialogProps {
  * as cursor-batched tree operations with visible progress (folder ops are
  * not atomic - NFR-09).
  */
-export function MoveCopyDialog({ mode, sourceBucket, entries, onClose, onDone }: MoveCopyDialogProps) {
-  const { data: bucketsData } = useBuckets();
-  const [destBucket, setDestBucket] = useState(sourceBucket);
-  const [destPrefix, setDestPrefix] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function MoveCopyDialog({
+  mode,
+  sourceBucket,
+  entries,
+  onClose,
+  onDone,
+}: MoveCopyDialogProps) {
+  const { data: bucketsData } = useBuckets()
+  const [destBucket, setDestBucket] = useState(sourceBucket)
+  // Open the picker where the selection lives, like a file manager's "Move to".
+  const [destPrefix, setDestPrefix] = useState(() =>
+    entries[0] ? parentPrefix(entries[0].key) : ""
+  )
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<{
+    done: number
+    total: number
+  } | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const verb = mode === "move" ? "Move" : "Copy";
+  const verb = mode === "move" ? "Move" : "Copy"
   const summary =
-    entries.length === 1 ? `"${baseName(entries[0].key)}"` : pluralize(entries.length, "item");
+    entries.length === 1
+      ? `"${baseName(entries[0].key)}"`
+      : pluralize(entries.length, "item")
+
+  // A folder can't be moved or copied into itself, so the picker won't open it.
+  const blockedKeys = useMemo(
+    () =>
+      new Set(
+        destBucket === sourceBucket
+          ? entries.filter((e) => e.type === "folder").map((e) => e.key)
+          : []
+      ),
+    [destBucket, sourceBucket, entries]
+  )
+  // Moving to the folder the items are already in would only rename them to numbered copies.
+  const alreadyHere =
+    mode === "move" &&
+    destBucket === sourceBucket &&
+    entries.every((e) => parentPrefix(e.key) === destPrefix)
 
   async function runFolderOp(entry: ObjectEntry) {
-    let cursor: string | undefined;
+    let cursor: string | undefined
     for (;;) {
-      const destFolderPrefix = normalizeFolderKey(joinKey(destPrefix, baseName(entry.key)));
+      const destFolderPrefix = normalizeFolderKey(
+        joinKey(destPrefix, baseName(entry.key))
+      )
       const result = await api.treeOp({
         op: mode,
         sourceBucket,
@@ -60,55 +106,79 @@ export function MoveCopyDialog({ mode, sourceBucket, entries, onClose, onDone }:
         destPrefix: destFolderPrefix,
         onConflict: "rename",
         cursor,
-      });
-      const failed = result.processed.find((p) => p.status === "failed");
-      if (failed) throw new Error(`Failed on "${failed.key}": ${failed.reason}`);
-      if (result.done) return;
-      cursor = result.cursor ?? undefined;
+      })
+      const failed = result.processed.find((p) => p.status === "failed")
+      if (failed) throw new Error(`Failed on "${failed.key}": ${failed.reason}`)
+      if (result.done) return
+      cursor = result.cursor ?? undefined
     }
   }
 
   async function handleConfirm(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    setProgress({ done: 0, total: entries.length });
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    setProgress({ done: 0, total: entries.length })
     try {
       for (const entry of entries) {
         if (entry.type === "folder") {
-          await runFolderOp(entry);
+          await runFolderOp(entry)
         } else {
-          const destKey = joinKey(destPrefix, baseName(entry.key));
-          if (mode === "move") await api.move(sourceBucket, entry.key, destBucket, destKey, "rename");
-          else await api.copy(sourceBucket, entry.key, destBucket, destKey, "rename");
+          const destKey = joinKey(destPrefix, baseName(entry.key))
+          if (mode === "move")
+            await api.move(
+              sourceBucket,
+              entry.key,
+              destBucket,
+              destKey,
+              "rename"
+            )
+          else
+            await api.copy(
+              sourceBucket,
+              entry.key,
+              destBucket,
+              destKey,
+              "rename"
+            )
         }
-        setProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+        setProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev))
       }
-      onDone();
+      onDone()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Operation failed");
+      setError(err instanceof Error ? err.message : "Operation failed")
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg lg:max-w-2xl">
         <form onSubmit={handleConfirm} className="contents">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="truncate pr-6" title={`${verb} ${summary}`}>
               {verb} {summary}
             </DialogTitle>
             <DialogDescription>
-              Name clashes at the destination get a numbered copy instead of overwriting.
+              Name clashes at the destination get a numbered copy instead of
+              overwriting.
             </DialogDescription>
           </DialogHeader>
 
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="dest-bucket">Destination bucket</FieldLabel>
-              <NativeSelect id="dest-bucket" value={destBucket} onChange={(e) => setDestBucket(e.target.value)} disabled={busy}>
+              <NativeSelect
+                id="dest-bucket"
+                className="w-full"
+                value={destBucket}
+                onChange={(e) => {
+                  setDestBucket(e.target.value)
+                  setDestPrefix("")
+                }}
+                disabled={busy}
+              >
                 {bucketsData?.buckets.map((b) => (
                   <NativeSelectOption key={b} value={b}>
                     {b}
@@ -117,24 +187,30 @@ export function MoveCopyDialog({ mode, sourceBucket, entries, onClose, onDone }:
               </NativeSelect>
             </Field>
             <Field>
-              <FieldLabel htmlFor="dest-prefix">Destination folder</FieldLabel>
-              <Input
-                id="dest-prefix"
-                value={destPrefix}
-                onChange={(e) => setDestPrefix(e.target.value)}
-                placeholder="team-a/reports"
-                autoComplete="off"
+              <FieldLabel>Destination folder</FieldLabel>
+              <FolderPicker
+                bucket={destBucket}
+                prefix={destPrefix}
+                onPrefixChange={setDestPrefix}
+                blockedKeys={blockedKeys}
                 disabled={busy}
-                className="font-mono"
               />
-              <FieldDescription>Leave blank for the bucket root.</FieldDescription>
+              <FieldDescription className="truncate">
+                {alreadyHere
+                  ? "Already in this folder. Pick another one."
+                  : `${verb} to ${destBucket}/${destPrefix}`}
+              </FieldDescription>
             </Field>
           </FieldGroup>
 
           {progress && (
             <Progress value={(progress.done / progress.total) * 100}>
-              <ProgressLabel>{mode === "move" ? "Moving" : "Copying"}</ProgressLabel>
-              <ProgressValue>{() => `${progress.done} of ${progress.total}`}</ProgressValue>
+              <ProgressLabel>
+                {mode === "move" ? "Moving" : "Copying"}
+              </ProgressLabel>
+              <ProgressValue>
+                {() => `${progress.done} of ${progress.total}`}
+              </ProgressValue>
             </Progress>
           )}
 
@@ -145,15 +221,22 @@ export function MoveCopyDialog({ mode, sourceBucket, entries, onClose, onDone }:
               {/* NFR-09: tree ops aren't atomic, so say plainly that some items may already be done. */}
               <AlertDescription>
                 {error}
-                {progress && progress.done > 0 &&
+                {progress &&
+                  progress.done > 0 &&
                   ` ${pluralize(progress.done, "item")} before this one ${progress.done === 1 ? "was" : "were"} already ${mode === "move" ? "moved" : "copied"}.`}
               </AlertDescription>
             </Alert>
           )}
 
           <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" disabled={busy} />}>Cancel</DialogClose>
-            <Button type="submit" disabled={busy}>
+            <DialogClose
+              render={
+                <Button type="button" variant="outline" disabled={busy} />
+              }
+            >
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={busy || alreadyHere}>
               {busy && <Spinner data-icon="inline-start" />}
               {verb}
             </Button>
@@ -161,5 +244,5 @@ export function MoveCopyDialog({ mode, sourceBucket, entries, onClose, onDone }:
         </form>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

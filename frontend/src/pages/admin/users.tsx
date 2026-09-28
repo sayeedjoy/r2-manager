@@ -419,7 +419,7 @@ function GrantsDialog({ user, onClose, onSaved }: { user: UserRecord; onClose: (
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-2">
+          <div className="no-scrollbar -mx-4 flex max-h-[60svh] flex-col gap-2 overflow-y-auto px-4">
             {grants.length === 0 && (
               <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
                 No access yet. Add a bucket or folder below.
@@ -429,7 +429,7 @@ function GrantsDialog({ user, onClose, onSaved }: { user: UserRecord; onClose: (
               <div key={i} className="flex items-center gap-2">
                 <NativeSelect
                   aria-label="Bucket"
-                  className="w-40"
+                  className="w-28 shrink-0 sm:w-40"
                   value={g.bucket}
                   onChange={(e) => updateGrant(i, { bucket: e.target.value })}
                 >

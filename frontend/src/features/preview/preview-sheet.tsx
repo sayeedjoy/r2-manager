@@ -92,7 +92,9 @@ export function PreviewSheet({ bucket, entry, onClose, onEdit }: PreviewSheetPro
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{baseName(entry.key)}</DialogTitle>
+          <DialogTitle className="truncate pr-6" title={baseName(entry.key)}>
+            {baseName(entry.key)}
+          </DialogTitle>
           <DialogDescription className="sr-only">File preview</DialogDescription>
         </DialogHeader>
 
