@@ -1,22 +1,40 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import PostalMime from "postal-mime";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { normalizeKey } from "@r2-manager/shared";
 import type { Database } from "../db/client";
 import type { Storage } from "../storage/storage";
 import { mailMessages, mailAttachments } from "../db/schema";
-import { checkMessageAllowed, isAttachmentAllowed, DEFAULT_MAIL_RULES, type MailRules } from "./rules";
+import {
+  checkMessageAllowed,
+  isAttachmentAllowed,
+  DEFAULT_MAIL_RULES,
+  type MailRules,
+} from "./rules";
 
-export interface MailWebhookPayload {
-  rawObjectKey: string; // where the relay Worker stored the raw message in R2
-  bucket: string;
-  sender: string;
-  recipient: string;
-  sizeBytes: number;
-}
+export const mailWebhookPayloadSchema = z
+  .object({
+    rawObjectKey: z.string().min(1).max(1024),
+    bucket: z.string().min(1).max(255),
+    sender: z.string().min(1).max(320),
+    recipient: z.string().min(1).max(320),
+    sizeBytes: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(100 * 1024 * 1024),
+  })
+  .strict();
+
+export type MailWebhookPayload = z.infer<typeof mailWebhookPayloadSchema>;
 
 /** Verifies the relay Worker's signed webhook (HMAC-SHA256 over the raw request body). */
-export function verifyWebhookSignature(secret: string, body: string, signatureHex: string): boolean {
+export function verifyWebhookSignature(
+  secret: string,
+  body: string,
+  signatureHex: string,
+): boolean {
   const expected = createHmac("sha256", secret).update(body).digest("hex");
   const expectedBuf = Buffer.from(expected, "hex");
   const givenBuf = Buffer.from(signatureHex, "hex");
@@ -30,7 +48,12 @@ export async function ingestMessage(
   storage: Storage,
   payload: MailWebhookPayload,
   rules: MailRules = DEFAULT_MAIL_RULES,
-): Promise<{ status: "processed" | "rejected"; reason?: string; messageId: string }> {
+): Promise<{
+  status: "processed" | "rejected";
+  reason?: string;
+  messageId: string;
+}> {
+  const rawObjectKey = normalizeKey(payload.rawObjectKey);
   const rejection = checkMessageAllowed(rules, {
     sender: payload.sender,
     recipient: payload.recipient,
@@ -43,7 +66,7 @@ export async function ingestMessage(
       .values({
         sender: payload.sender,
         recipient: payload.recipient,
-        rawObjectKey: payload.rawObjectKey,
+        rawObjectKey,
         status: "rejected",
         reason: rejection,
       })
@@ -51,13 +74,22 @@ export async function ingestMessage(
     return { status: "rejected", reason: rejection, messageId: row!.id };
   }
 
-  const raw = await storage.get(payload.bucket, payload.rawObjectKey);
+  const raw = await storage.get(payload.bucket, rawObjectKey);
   if (!raw) {
     const [row] = await db
       .insert(mailMessages)
-      .values({ sender: payload.sender, recipient: payload.recipient, status: "failed", reason: "raw_object_missing" })
+      .values({
+        sender: payload.sender,
+        recipient: payload.recipient,
+        status: "failed",
+        reason: "raw_object_missing",
+      })
       .returning();
-    return { status: "rejected", reason: "raw_object_missing", messageId: row!.id };
+    return {
+      status: "rejected",
+      reason: "raw_object_missing",
+      messageId: row!.id,
+    };
   }
 
   const rawBuffer = Buffer.from(await new Response(raw.body).arrayBuffer());
@@ -80,16 +112,28 @@ export async function ingestMessage(
       sender: payload.sender,
       recipient: payload.recipient,
       subject: parsed.subject ?? null,
-      rawObjectKey: payload.rawObjectKey,
+      rawObjectKey,
       status: "processed",
     })
     .returning();
 
   for (const attachment of parsed.attachments ?? []) {
-    const content = attachment.content instanceof ArrayBuffer ? Buffer.from(attachment.content) : Buffer.from(attachment.content as any);
-    const allowed = isAttachmentAllowed(rules, attachment.mimeType, content.byteLength);
-    const safeName = (attachment.filename ?? "attachment").replace(/[/\\]/g, "_");
-    const objectKey = normalizeKey(`_inbox/attachments/${message!.id}/${crypto.randomUUID()}-${safeName}`);
+    const content =
+      attachment.content instanceof ArrayBuffer
+        ? Buffer.from(attachment.content)
+        : Buffer.from(attachment.content as any);
+    const allowed = isAttachmentAllowed(
+      rules,
+      attachment.mimeType,
+      content.byteLength,
+    );
+    const safeName = (attachment.filename ?? "attachment").replace(
+      /[/\\]/g,
+      "_",
+    );
+    const objectKey = normalizeKey(
+      `_inbox/attachments/${message!.id}/${crypto.randomUUID()}-${safeName}`,
+    );
 
     if (!allowed) {
       await db.insert(mailAttachments).values({
@@ -103,7 +147,9 @@ export async function ingestMessage(
       continue;
     }
 
-    await storage.put(payload.bucket, objectKey, content, { contentType: attachment.mimeType });
+    await storage.put(payload.bucket, objectKey, content, {
+      contentType: attachment.mimeType,
+    });
     await db.insert(mailAttachments).values({
       messageId: message!.id,
       objectKey,

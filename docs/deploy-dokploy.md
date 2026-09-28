@@ -37,6 +37,9 @@ Set the variables from [.env.example](../.env.example) in Dokploy's environment 
 | `ACCESS_TEAM_DOMAIN` / `ACCESS_AUD` | Required if `AUTH_MODE` includes `access` |
 | `SESSION_SECRET` | 32+ random bytes |
 | `APP_BASE_URL` | The public URL Dokploy will route to this app (used to build share links) |
+| `TRUST_PROXY_HOPS` | Number of trusted reverse proxies that append or replace `X-Forwarded-For` (normally `1` for Dokploy) |
+
+The application rejects non-HTTPS `APP_BASE_URL` and `R2_ENDPOINT` values in production. Ensure the Dokploy proxy replaces or appends `X-Forwarded-For`; do not pass an untrusted client value through unchanged.
 
 ## 4. Run migrations
 

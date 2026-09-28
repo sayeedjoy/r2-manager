@@ -1,11 +1,14 @@
 import { z } from "zod";
-import { AppError } from "@r2-manager/shared";
+import { AppError, SIGNED_OUT_USERNAME } from "@r2-manager/shared";
 
 const envSchema = z
   .object({
-    NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+    NODE_ENV: z
+      .enum(["development", "production", "test"])
+      .default("development"),
     PORT: z.coerce.number().int().positive().default(8787),
     APP_BASE_URL: z.string().url(),
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(5).default(1),
 
     DATABASE_URL: z.string().min(1),
 
@@ -20,18 +23,35 @@ const envSchema = z
     ACCESS_AUD: z.string().optional(),
     BASIC_AUTH_USERNAME: z.string().optional(),
     BASIC_AUTH_PASSWORD_HASH: z.string().optional(),
-    SESSION_SECRET: z.string().min(16),
+    SESSION_SECRET: z.string().min(32),
 
-    MAIL_WEBHOOK_SECRET: z.string().optional(),
-    CRON_SECRET: z.string().optional(),
+    MAIL_WEBHOOK_SECRET: z.string().min(32).optional(),
+    CRON_SECRET: z.string().min(32).optional(),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === "production") {
+      if (new URL(env.APP_BASE_URL).protocol !== "https:") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["APP_BASE_URL"],
+          message: "must use https in production",
+        });
+      }
+      if (env.R2_ENDPOINT && new URL(env.R2_ENDPOINT).protocol !== "https:") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["R2_ENDPOINT"],
+          message: "must use https in production",
+        });
+      }
+    }
     // AUTH-03: deployment must select Access, Basic, or both; refuse to start unconfigured.
     if (env.AUTH_MODE === "access" || env.AUTH_MODE === "both") {
       if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "ACCESS_TEAM_DOMAIN and ACCESS_AUD are required when AUTH_MODE includes 'access'",
+          message:
+            "ACCESS_TEAM_DOMAIN and ACCESS_AUD are required when AUTH_MODE includes 'access'",
         });
       }
     }
@@ -39,15 +59,26 @@ const envSchema = z
       if (!env.BASIC_AUTH_USERNAME || !env.BASIC_AUTH_PASSWORD_HASH) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD_HASH are required when AUTH_MODE includes 'basic'",
+          message:
+            "BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD_HASH are required when AUTH_MODE includes 'basic'",
         });
-      } else if (!/^scrypt:[0-9a-f]+:[0-9a-f]+$/.test(env.BASIC_AUTH_PASSWORD_HASH)) {
+      } else if (
+        !/^scrypt:[0-9a-f]+:[0-9a-f]+$/.test(env.BASIC_AUTH_PASSWORD_HASH)
+      ) {
         // A plain password or a bcrypt hash here would otherwise boot fine and reject every login.
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["BASIC_AUTH_PASSWORD_HASH"],
           message:
             "must be the output of `pnpm --filter server run hash-password '<password>'` (starts with \"scrypt:\"), not the password itself",
+        });
+      }
+      if (env.BASIC_AUTH_USERNAME === SIGNED_OUT_USERNAME) {
+        // basic-auth.ts rejects this username outright; it's what sign-out leaves in the browser.
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["BASIC_AUTH_USERNAME"],
+          message: `"${SIGNED_OUT_USERNAME}" is reserved for signing out; pick another username`,
         });
       }
     }
@@ -82,12 +113,16 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const parsed = envSchema.safeParse(blankToUndefined(source));
   if (!parsed.success) {
-    const details = parsed.error.issues.map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n");
+    const details = parsed.error.issues
+      .map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("\n");
     throw new Error(`Invalid server configuration:\n${details}`);
   }
 
   const env = parsed.data;
-  const buckets = env.R2_BUCKETS.split(",").map((b) => b.trim()).filter(Boolean);
+  const buckets = env.R2_BUCKETS.split(",")
+    .map((b) => b.trim())
+    .filter(Boolean);
   if (buckets.length === 0) {
     throw new Error("R2_BUCKETS must list at least one bucket");
   }
@@ -95,14 +130,22 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   cached = {
     env,
     buckets,
-    r2Endpoint: env.R2_ENDPOINT ?? `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    r2Endpoint:
+      env.R2_ENDPOINT ??
+      `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   };
   return cached;
 }
 
-export function assertBucketConfigured(config: AppConfig, bucket: string): void {
+export function assertBucketConfigured(
+  config: AppConfig,
+  bucket: string,
+): void {
   if (!config.buckets.includes(bucket)) {
-    throw new AppError("NOT_FOUND", `Bucket "${bucket}" is not configured for this deployment`);
+    throw new AppError(
+      "NOT_FOUND",
+      `Bucket "${bucket}" is not configured for this deployment`,
+    );
   }
 }
 

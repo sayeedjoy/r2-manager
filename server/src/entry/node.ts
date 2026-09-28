@@ -7,6 +7,7 @@ import { createApp } from "../app";
 import { loadConfig } from "../config";
 import { closeDb } from "../db/client";
 import type { HonoEnv } from "../types";
+import { securityHeaders } from "../middleware/security-headers";
 
 // Load the repo-root .env regardless of the process's cwd (pnpm runs this
 // script with cwd set to server/, so a bare "dotenv/config" would silently
@@ -18,6 +19,7 @@ const apiApp = createApp({ config });
 
 // Dokploy: one process serves the built frontend and the API (project-structure.md).
 const app = new Hono<HonoEnv>();
+app.use("*", securityHeaders(config.env.NODE_ENV === "production"));
 app.route("/", apiApp);
 app.use("/*", serveStatic({ root: "../frontend/dist" }));
 app.get("*", serveStatic({ path: "../frontend/dist/index.html" }));

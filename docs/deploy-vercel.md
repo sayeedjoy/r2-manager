@@ -14,6 +14,7 @@ Import this repo into Vercel. [vercel.json](../vercel.json) points the build at 
 ## 2. Environment variables
 
 Same variables as [.env.example](../.env.example) / [deploy-dokploy.md](deploy-dokploy.md), set in the Vercel project's Environment Variables panel. Use the **pooled** connection string for `DATABASE_URL`.
+Set `TRUST_PROXY_HOPS=1`; Vercel must remain the only direct ingress so its forwarded client address is authoritative.
 
 ## 3. Migrations
 

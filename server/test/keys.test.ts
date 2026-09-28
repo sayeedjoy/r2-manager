@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { InvalidKeyError, isWithinPrefix, joinKey, normalizeFolderKey, normalizeKey, parentPrefix } from "@r2-manager/shared";
+import {
+  InvalidKeyError,
+  isWithinPrefix,
+  joinKey,
+  normalizeFolderKey,
+  normalizeKey,
+  parentPrefix,
+} from "@r2-manager/shared";
 
 describe("normalizeKey", () => {
   it("accepts an ordinary nested key", () => {
@@ -29,6 +36,12 @@ describe("isWithinPrefix", () => {
   it("only allows keys under the granted prefix", () => {
     expect(isWithinPrefix("team-a/report.pdf", "team-a/")).toBe(true);
     expect(isWithinPrefix("team-b/report.pdf", "team-a/")).toBe(false);
+  });
+
+  it("treats a prefix without a trailing slash as a folder boundary", () => {
+    expect(isWithinPrefix("team-a/report.pdf", "team-a")).toBe(true);
+    expect(isWithinPrefix("team-admin/report.pdf", "team-a")).toBe(false);
+    expect(isWithinPrefix("team-a", "team-a")).toBe(false);
   });
 });
 

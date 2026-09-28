@@ -10,21 +10,52 @@ const base = {
   R2_BUCKETS: "bucket",
   AUTH_MODE: "basic",
   BASIC_AUTH_USERNAME: "admin",
-  SESSION_SECRET: "0123456789abcdef0123",
+  SESSION_SECRET: "0123456789abcdef0123456789abcdef",
 };
 
 afterEach(() => resetConfigForTests());
 
 describe("BASIC_AUTH_PASSWORD_HASH validation", () => {
   it("refuses to start with a plain password instead of a hash", () => {
-    expect(() => loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "hunter2" })).toThrow(/BASIC_AUTH_PASSWORD_HASH.*hash-password/);
+    expect(() =>
+      loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "hunter2" }),
+    ).toThrow(/BASIC_AUTH_PASSWORD_HASH.*hash-password/);
   });
 
   it("accepts a scrypt hash from the hash-password script", () => {
-    expect(() => loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234" })).not.toThrow();
+    expect(() =>
+      loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234" }),
+    ).not.toThrow();
   });
 
   it("treats a blank optional value as unset", () => {
-    expect(() => loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234", R2_ENDPOINT: "" })).not.toThrow();
+    expect(() =>
+      loadConfig({
+        ...base,
+        BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234",
+        R2_ENDPOINT: "",
+      }),
+    ).not.toThrow();
+  });
+
+  it("requires HTTPS application and storage URLs in production", () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        NODE_ENV: "production",
+        BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234",
+      }),
+    ).toThrow(/APP_BASE_URL.*https/);
+
+    resetConfigForTests();
+    expect(() =>
+      loadConfig({
+        ...base,
+        NODE_ENV: "production",
+        APP_BASE_URL: "https://files.example.com",
+        R2_ENDPOINT: "http://storage.internal",
+        BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234",
+      }),
+    ).toThrow(/R2_ENDPOINT.*https/);
   });
 });

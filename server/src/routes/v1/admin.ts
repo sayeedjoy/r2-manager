@@ -1,7 +1,14 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { AppError, appSettingsSchema, auditQuerySchema, upsertUserSchema } from "@r2-manager/shared";
+import {
+  AppError,
+  appSettingsSchema,
+  auditQuerySchema,
+  normalizeFolderKey,
+  upsertUserSchema,
+} from "@r2-manager/shared";
 import type { HonoEnv } from "../../types";
+import { assertBucketConfigured } from "../../config";
 import { requireCapability } from "../../services/authz";
 import { users, grants } from "../../db/schema";
 import { getSettings, updateSettings } from "../../services/settings";
@@ -26,7 +33,9 @@ app.get("/users", async (c) => {
       role: u.role,
       status: u.status,
       createdAt: u.createdAt.toISOString(),
-      grants: allGrants.filter((g) => g.userId === u.id).map((g) => ({ bucket: g.bucket, prefix: g.prefix })),
+      grants: allGrants
+        .filter((g) => g.userId === u.id)
+        .map((g) => ({ bucket: g.bucket, prefix: g.prefix })),
     })),
   });
 });
@@ -34,20 +43,39 @@ app.get("/users", async (c) => {
 app.post("/users", async (c) => {
   const body = upsertUserSchema.parse(await c.req.json());
   const db = c.get("db");
+  const normalizedGrants = body.grants.map((grant) => ({
+    bucket: grant.bucket,
+    prefix: grant.prefix.trim() === "" ? "" : normalizeFolderKey(grant.prefix),
+  }));
+  for (const grant of normalizedGrants)
+    assertBucketConfigured(c.get("config"), grant.bucket);
 
   const [targetUser] = await db
     .insert(users)
-    .values({ identity: body.identity, displayName: body.displayName, role: body.role })
+    .values({
+      identity: body.identity,
+      displayName: body.displayName,
+      role: body.role,
+    })
     .onConflictDoUpdate({
       target: users.identity,
       set: { displayName: body.displayName, role: body.role },
     })
     .returning();
-  if (!targetUser) throw new AppError("INTERNAL_ERROR", "Failed to create or update user");
+  if (!targetUser)
+    throw new AppError("INTERNAL_ERROR", "Failed to create or update user");
 
   await db.delete(grants).where(eq(grants.userId, targetUser.id));
-  if (body.grants.length > 0) {
-    await db.insert(grants).values(body.grants.map((g) => ({ userId: targetUser.id, bucket: g.bucket, prefix: g.prefix })));
+  if (normalizedGrants.length > 0) {
+    await db
+      .insert(grants)
+      .values(
+        normalizedGrants.map((g) => ({
+          userId: targetUser.id,
+          bucket: g.bucket,
+          prefix: g.prefix,
+        })),
+      );
   }
 
   await recordAudit(db, {
@@ -65,7 +93,11 @@ app.post("/users", async (c) => {
 app.post("/users/:id/disable", async (c) => {
   const db = c.get("db");
   const id = c.req.param("id");
-  const [user] = await db.update(users).set({ status: "disabled" }).where(eq(users.id, id)).returning();
+  const [user] = await db
+    .update(users)
+    .set({ status: "disabled" })
+    .where(eq(users.id, id))
+    .returning();
   if (!user) throw new AppError("NOT_FOUND", "User not found");
 
   await recordAudit(db, {

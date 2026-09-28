@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   AppError,
+  baseName,
   copyObjectSchema,
   deleteObjectsSchema,
   listObjectsQuerySchema,
@@ -12,18 +13,33 @@ import {
 import type { HonoEnv } from "../../types";
 import { assertBucketConfigured } from "../../config";
 import { requireCapability } from "../../services/authz";
-import { listFolder, copyObject as copyObjectSvc, moveObject as moveObjectSvc, renameObject as renameObjectSvc, deleteObjects } from "../../services/objects";
+import {
+  listFolder,
+  copyObject as copyObjectSvc,
+  moveObject as moveObjectSvc,
+  renameObject as renameObjectSvc,
+  deleteObjects,
+} from "../../services/objects";
 import { recordAudit } from "../../services/audit";
 import { getSettings } from "../../services/settings";
 import { buildZipStream } from "../../services/archive";
+import {
+  applyUntrustedContentHeaders,
+  contentDisposition,
+} from "../../services/content-disposition";
 
 const app = new Hono<HonoEnv>();
 
 app.get("/", async (c) => {
-  const query = listObjectsQuerySchema.parse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const query = listObjectsQuerySchema.parse(
+    Object.fromEntries(new URL(c.req.url).searchParams),
+  );
   const { config, db, user, storage } = c.var;
   assertBucketConfigured(config, query.bucket);
-  await requireCapability(db, user, "object:read", { bucket: query.bucket, key: query.prefix });
+  await requireCapability(db, user, "object:read", {
+    bucket: query.bucket,
+    key: query.prefix,
+  });
 
   const result = await listFolder(storage, query);
   return c.json(result);
@@ -33,7 +49,8 @@ app.get("/", async (c) => {
 app.get("/content", async (c) => {
   const bucket = c.req.query("bucket");
   const key = c.req.query("key");
-  if (!bucket || !key) return c.json({ error: "bucket and key are required" }, 400);
+  if (!bucket || !key)
+    return c.json({ error: "bucket and key are required" }, 400);
 
   const { config, db, user, storage } = c.var;
   assertBucketConfigured(config, bucket);
@@ -43,7 +60,11 @@ app.get("/content", async (c) => {
   let range: { start: number; end?: number } | undefined;
   if (rangeHeader) {
     const match = /bytes=(\d+)-(\d*)/.exec(rangeHeader);
-    if (match) range = { start: Number(match[1]), end: match[2] ? Number(match[2]) : undefined };
+    if (match)
+      range = {
+        start: Number(match[1]),
+        end: match[2] ? Number(match[2]) : undefined,
+      };
   }
 
   const result = await storage.get(bucket, key, { range });
@@ -54,9 +75,17 @@ app.get("/content", async (c) => {
   headers.set("etag", `"${result.etag}"`);
   headers.set("accept-ranges", "bytes");
   headers.set("cache-control", "private, no-cache");
+  headers.set("content-disposition", contentDisposition(baseName(key)));
+  applyUntrustedContentHeaders(headers);
   if (result.range) {
-    headers.set("content-range", `bytes ${result.range.start}-${result.range.end}/${result.range.total}`);
-    headers.set("content-length", String(result.range.end - result.range.start + 1));
+    headers.set(
+      "content-range",
+      `bytes ${result.range.start}-${result.range.end}/${result.range.total}`,
+    );
+    headers.set(
+      "content-length",
+      String(result.range.end - result.range.start + 1),
+    );
     return new Response(result.body, { status: 206, headers });
   }
   headers.set("content-length", String(result.size));
@@ -67,7 +96,10 @@ app.post("/rename", async (c) => {
   const body = renameObjectSchema.parse(await c.req.json());
   const { config, db, user, storage } = c.var;
   assertBucketConfigured(config, body.bucket);
-  await requireCapability(db, user, "object:write", { bucket: body.bucket, key: body.key });
+  await requireCapability(db, user, "object:write", {
+    bucket: body.bucket,
+    key: body.key,
+  });
 
   const result = await renameObjectSvc(storage, body);
   await recordAudit(db, {
@@ -86,8 +118,14 @@ app.post("/copy", async (c) => {
   const { config, db, user, storage } = c.var;
   assertBucketConfigured(config, body.sourceBucket);
   assertBucketConfigured(config, body.destBucket);
-  await requireCapability(db, user, "object:read", { bucket: body.sourceBucket, key: body.sourceKey });
-  await requireCapability(db, user, "object:write", { bucket: body.destBucket, key: body.destKey });
+  await requireCapability(db, user, "object:read", {
+    bucket: body.sourceBucket,
+    key: body.sourceKey,
+  });
+  await requireCapability(db, user, "object:write", {
+    bucket: body.destBucket,
+    key: body.destKey,
+  });
 
   const result = await copyObjectSvc(storage, body);
   await recordAudit(db, {
@@ -106,8 +144,14 @@ app.post("/move", async (c) => {
   const { config, db, user, storage } = c.var;
   assertBucketConfigured(config, body.sourceBucket);
   assertBucketConfigured(config, body.destBucket);
-  await requireCapability(db, user, "object:write", { bucket: body.sourceBucket, key: body.sourceKey });
-  await requireCapability(db, user, "object:write", { bucket: body.destBucket, key: body.destKey });
+  await requireCapability(db, user, "object:write", {
+    bucket: body.sourceBucket,
+    key: body.sourceKey,
+  });
+  await requireCapability(db, user, "object:write", {
+    bucket: body.destBucket,
+    key: body.destKey,
+  });
 
   const result = await moveObjectSvc(storage, body);
   await recordAudit(db, {
@@ -126,7 +170,10 @@ app.post("/delete", async (c) => {
   const { config, db, user, storage } = c.var;
   assertBucketConfigured(config, body.bucket);
   for (const key of body.keys) {
-    await requireCapability(db, user, "object:delete", { bucket: body.bucket, key });
+    await requireCapability(db, user, "object:delete", {
+      bucket: body.bucket,
+      key,
+    });
   }
 
   await deleteObjects(storage, body.bucket, body.keys);
@@ -146,18 +193,27 @@ app.put("/content", async (c) => {
   const body = updateContentSchema.parse(await c.req.json());
   const { config, db, user, storage } = c.var;
   assertBucketConfigured(config, body.bucket);
-  await requireCapability(db, user, "object:write", { bucket: body.bucket, key: body.key });
+  await requireCapability(db, user, "object:write", {
+    bucket: body.bucket,
+    key: body.key,
+  });
 
   const settings = await getSettings(db);
   const bytes = new TextEncoder().encode(body.content);
   if (bytes.byteLength > settings.maxEditorSizeBytes) {
-    throw new AppError("PAYLOAD_TOO_LARGE", `Content exceeds the configured editor limit of ${settings.maxEditorSizeBytes} bytes`);
+    throw new AppError(
+      "PAYLOAD_TOO_LARGE",
+      `Content exceeds the configured editor limit of ${settings.maxEditorSizeBytes} bytes`,
+    );
   }
 
   const current = await storage.head(body.bucket, body.key);
   if (!current) throw new AppError("NOT_FOUND", "Object not found");
   if (current.etag !== body.ifMatch) {
-    throw new AppError("PRECONDITION_FAILED", "The file changed since it was loaded; reload and try again");
+    throw new AppError(
+      "PRECONDITION_FAILED",
+      "The file changed since it was loaded; reload and try again",
+    );
   }
 
   const { etag } = await storage.put(body.bucket, body.key, bytes, {
@@ -177,7 +233,12 @@ app.put("/content", async (c) => {
     details: { size: bytes.byteLength },
   });
 
-  return c.json({ bucket: body.bucket, key: body.key, etag, size: bytes.byteLength });
+  return c.json({
+    bucket: body.bucket,
+    key: body.key,
+    etag,
+    size: bytes.byteLength,
+  });
 });
 
 /** XFER-06: bulk download as a generated archive, bounded by the configured size limit. */
@@ -186,13 +247,19 @@ app.post("/zip", async (c) => {
   const { config, db, user, storage } = c.var;
   assertBucketConfigured(config, body.bucket);
   for (const key of body.keys) {
-    await requireCapability(db, user, "object:read", { bucket: body.bucket, key });
+    await requireCapability(db, user, "object:read", {
+      bucket: body.bucket,
+      key,
+    });
   }
 
   const settings = await getSettings(db);
-  const heads = await Promise.all(body.keys.map((key) => storage.head(body.bucket, key)));
+  const heads = await Promise.all(
+    body.keys.map((key) => storage.head(body.bucket, key)),
+  );
   const missing = body.keys.filter((_, i) => !heads[i]);
-  if (missing.length > 0) throw new AppError("NOT_FOUND", `Not found: ${missing.join(", ")}`);
+  if (missing.length > 0)
+    throw new AppError("NOT_FOUND", `Not found: ${missing.join(", ")}`);
 
   const totalBytes = heads.reduce((sum, h) => sum + (h?.size ?? 0), 0);
   if (totalBytes > settings.maxBulkDownloadBytes) {
@@ -216,7 +283,7 @@ app.post("/zip", async (c) => {
   return new Response(zipBytes, {
     headers: {
       "content-type": "application/zip",
-      "content-disposition": `attachment; filename="${body.archiveName}"`,
+      "content-disposition": contentDisposition(body.archiveName),
       "content-length": String(zipBytes.byteLength),
     },
   });

@@ -53,7 +53,7 @@ export function createApp(opts: CreateAppOptions) {
     c.set("storage", storage);
     await next();
   });
-  app.use("*", securityHeaders());
+  app.use("*", securityHeaders(opts.config.env.NODE_ENV === "production"));
   app.use(
     "/api/*",
     cors({
@@ -92,7 +92,11 @@ export function createApp(opts: CreateAppOptions) {
       return c.json(err.toBody(correlationIdValue), err.status as any);
     }
     if (err instanceof ZodError) {
-      const appErr = new AppError("VALIDATION_ERROR", "Invalid request", err.flatten());
+      const appErr = new AppError(
+        "VALIDATION_ERROR",
+        "Invalid request",
+        err.flatten(),
+      );
       return c.json(appErr.toBody(correlationIdValue), 400);
     }
     // Services normalize user-supplied keys with shared/keys.ts. Its messages ("Key must not contain '..'") are safe
@@ -102,7 +106,14 @@ export function createApp(opts: CreateAppOptions) {
       return c.json(appErr.toBody(correlationIdValue), 400);
     }
     if (err instanceof HTTPException) {
-      const appErr = new AppError(err.status === 401 ? "UNAUTHENTICATED" : err.status === 403 ? "UNAUTHORIZED" : "INTERNAL_ERROR", err.message);
+      const appErr = new AppError(
+        err.status === 401
+          ? "UNAUTHENTICATED"
+          : err.status === 403
+            ? "UNAUTHORIZED"
+            : "INTERNAL_ERROR",
+        err.message,
+      );
       return c.json(appErr.toBody(correlationIdValue), err.status);
     }
 

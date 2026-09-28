@@ -6,6 +6,10 @@ import { assertBucketConfigured } from "../../config";
 import { requireCapability } from "../../services/authz";
 import { mailAttachments, mailMessages } from "../../db/schema";
 import { recordAudit } from "../../services/audit";
+import {
+  applyUntrustedContentHeaders,
+  contentDisposition,
+} from "../../services/content-disposition";
 
 const app = new Hono<HonoEnv>();
 
@@ -14,7 +18,10 @@ app.get("/messages", async (c) => {
   const { db, user } = c.var;
   await requireCapability(db, user, "mail:read");
 
-  const messages = await db.query.mailMessages.findMany({ orderBy: desc(mailMessages.receivedAt), limit: 100 });
+  const messages = await db.query.mailMessages.findMany({
+    orderBy: desc(mailMessages.receivedAt),
+    limit: 100,
+  });
   return c.json({ messages });
 });
 
@@ -23,9 +30,13 @@ app.get("/messages/:id", async (c) => {
   await requireCapability(db, user, "mail:read");
 
   const id = c.req.param("id");
-  const message = await db.query.mailMessages.findFirst({ where: eq(mailMessages.id, id) });
+  const message = await db.query.mailMessages.findFirst({
+    where: eq(mailMessages.id, id),
+  });
   if (!message) throw new AppError("NOT_FOUND", "Message not found");
-  const attachments = await db.query.mailAttachments.findMany({ where: eq(mailAttachments.messageId, id) });
+  const attachments = await db.query.mailAttachments.findMany({
+    where: eq(mailAttachments.messageId, id),
+  });
   return c.json({ message, attachments });
 });
 
@@ -35,20 +46,23 @@ app.get("/attachments/:id/content", async (c) => {
   await requireCapability(db, user, "mail:read");
 
   const id = c.req.param("id");
-  const attachment = await db.query.mailAttachments.findFirst({ where: eq(mailAttachments.id, id) });
-  if (!attachment || attachment.status !== "stored") throw new AppError("NOT_FOUND", "Attachment not found");
+  const attachment = await db.query.mailAttachments.findFirst({
+    where: eq(mailAttachments.id, id),
+  });
+  if (!attachment || attachment.status !== "stored")
+    throw new AppError("NOT_FOUND", "Attachment not found");
 
   const inboxBucket = config.buckets[0]!;
   const result = await storage.get(inboxBucket, attachment.objectKey);
   if (!result) throw new AppError("NOT_FOUND", "Attachment not found");
 
-  return new Response(result.body, {
-    headers: {
-      "content-type": attachment.mimeType ?? "application/octet-stream",
-      "content-disposition": `inline; filename="${attachment.displayFilename}"`,
-      "content-length": String(result.size),
-    },
+  const headers = new Headers({
+    "content-type": attachment.mimeType ?? "application/octet-stream",
+    "content-disposition": contentDisposition(attachment.displayFilename),
+    "content-length": String(result.size),
   });
+  applyUntrustedContentHeaders(headers);
+  return new Response(result.body, { headers });
 });
 
 /** MAIL-04: copies an attachment into an ordinary managed folder the user can browse normally. */
@@ -59,14 +73,25 @@ app.post("/attachments/:id/copy-to-folder", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<{ destBucket: string; destKey: string }>();
   assertBucketConfigured(config, body.destBucket);
-  await requireCapability(db, user, "object:write", { bucket: body.destBucket, key: body.destKey });
+  await requireCapability(db, user, "object:write", {
+    bucket: body.destBucket,
+    key: body.destKey,
+  });
 
-  const attachment = await db.query.mailAttachments.findFirst({ where: eq(mailAttachments.id, id) });
-  if (!attachment || attachment.status !== "stored") throw new AppError("NOT_FOUND", "Attachment not found");
+  const attachment = await db.query.mailAttachments.findFirst({
+    where: eq(mailAttachments.id, id),
+  });
+  if (!attachment || attachment.status !== "stored")
+    throw new AppError("NOT_FOUND", "Attachment not found");
 
   const inboxBucket = config.buckets[0]!;
   const destKey = normalizeKey(body.destKey);
-  const { etag } = await storage.copy(inboxBucket, attachment.objectKey, body.destBucket, destKey);
+  const { etag } = await storage.copy(
+    inboxBucket,
+    attachment.objectKey,
+    body.destBucket,
+    destKey,
+  );
 
   await recordAudit(db, {
     actorId: user.id,

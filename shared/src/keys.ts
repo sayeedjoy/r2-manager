@@ -22,7 +22,9 @@ export function splitKey(key: string): string[] {
   const segments = key.split("/");
   for (const segment of segments) {
     if (segment.length === 0) {
-      throw new InvalidKeyError("Key must not contain empty segments (e.g. //)");
+      throw new InvalidKeyError(
+        "Key must not contain empty segments (e.g. //)",
+      );
     }
     if (TRAVERSAL_SEGMENTS.has(segment)) {
       throw new InvalidKeyError("Key must not contain '.' or '..' segments");
@@ -70,16 +72,20 @@ export function parentPrefix(key: string): string {
 export function baseName(key: string): string {
   const withoutTrailingSlash = key.endsWith("/") ? key.slice(0, -1) : key;
   const idx = withoutTrailingSlash.lastIndexOf("/");
-  return idx === -1 ? withoutTrailingSlash : withoutTrailingSlash.slice(idx + 1);
+  return idx === -1
+    ? withoutTrailingSlash
+    : withoutTrailingSlash.slice(idx + 1);
 }
 
-/** True if `key` is inside `prefix` (or equal to it, when prefix is a folder). */
+/** True if `key` is inside the folder boundary represented by `prefix`. */
 export function isWithinPrefix(key: string, prefix: string): boolean {
   if (prefix === "") return true;
-  return key.startsWith(prefix);
+  const folderPrefix = prefix.endsWith("/") ? prefix : `${prefix}/`;
+  return key.startsWith(folderPrefix);
 }
 
 export function joinKey(prefix: string, name: string): string {
-  const cleanPrefix = prefix === "" ? "" : prefix.endsWith("/") ? prefix : `${prefix}/`;
+  const cleanPrefix =
+    prefix === "" ? "" : prefix.endsWith("/") ? prefix : `${prefix}/`;
   return normalizeKey(`${cleanPrefix}${name}`);
 }
