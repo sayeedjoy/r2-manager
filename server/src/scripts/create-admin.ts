@@ -5,7 +5,7 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 import { emailSchema, passwordSchema } from "@r2-manager/shared";
-import { appSettings, sessions, users } from "../db/schema";
+import { appSettings, passwordResetTokens, sessions, users } from "../db/schema";
 import { hashPassword } from "../services/crypto";
 
 loadDotenv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
@@ -67,20 +67,24 @@ async function main() {
     ? { totpSecret: null, totpPendingSecret: null, totpEnabledAt: null, totpLastStep: null, recoveryCodeHashes: [] }
     : {};
   const passwordFields = passwordHash ? { passwordHash, passwordChangedAt: new Date() } : {};
-  const [user] = await db
-    .insert(users)
-    .values({ identity: email, displayName, role: "admin", ...passwordFields })
-    .onConflictDoUpdate({
-      target: users.identity,
-      set: { role: "admin", status: "active", ...passwordFields, ...twoFactorReset },
-    })
-    .returning({ id: users.id });
-  await db.delete(sessions).where(eq(sessions.userId, user!.id));
-  // An admin now exists, so the browser's first-run setup must stay closed.
-  await db
-    .insert(appSettings)
-    .values({ key: "setup", value: { completedAt: new Date().toISOString() } })
-    .onConflictDoNothing();
+  await db.transaction(async (tx) => {
+    const [user] = await tx
+      .insert(users)
+      .values({ identity: email, displayName, role: "admin", ...passwordFields })
+      .onConflictDoUpdate({
+        target: users.identity,
+        set: { role: "admin", status: "active", ...passwordFields, ...twoFactorReset },
+      })
+      .returning({ id: users.id });
+    await tx.delete(sessions).where(eq(sessions.userId, user!.id));
+    // Recovery must invalidate links issued for the password that was just replaced.
+    await tx.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, user!.id));
+    // An admin now exists, so the browser's first-run setup must stay closed.
+    await tx
+      .insert(appSettings)
+      .values({ key: "setup", value: { completedAt: new Date().toISOString() } })
+      .onConflictDoNothing();
+  });
   await sql.end();
 
   console.log(`Admin "${email}" is ready.${reset2fa ? " Two-factor authentication is off." : ""}`);

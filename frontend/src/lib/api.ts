@@ -98,7 +98,6 @@ export interface UpsertUserBody {
   role: Role;
   grants: { bucket: string; prefix: string }[];
   password?: string;
-  sendInvite?: boolean;
 }
 
 export const api = {

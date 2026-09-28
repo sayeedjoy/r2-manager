@@ -71,61 +71,52 @@ app.post("/users", async (c) => {
   for (const grant of normalizedGrants)
     assertBucketConfigured(c.get("config"), grant.bucket);
   const passwordLogin = usesPasswordLogin(c.get("config").env.AUTH_MODE);
-  if (passwordLogin && body.sendInvite && !(await isMailConfigured(db))) {
-    throw new AppError("PRECONDITION_FAILED", "Set up email delivery before sending invites, or set a password instead");
-  }
 
-  const [targetUser] = await db
-    .insert(users)
-    .values({
-      identity: body.identity,
-      displayName: body.displayName,
-      role: body.role,
-    })
-    .onConflictDoUpdate({
-      target: users.identity,
-      set: { displayName: body.displayName, role: body.role },
-    })
-    .returning();
-  if (!targetUser)
-    throw new AppError("INTERNAL_ERROR", "Failed to create or update user");
+  const targetUser = await db.transaction(async (tx) => {
+    const transactionDb = tx as unknown as Database;
+    const [savedUser] = await tx
+      .insert(users)
+      .values({
+        identity: body.identity,
+        displayName: body.displayName,
+        role: body.role,
+      })
+      .onConflictDoUpdate({
+        target: users.identity,
+        set: { displayName: body.displayName, role: body.role },
+      })
+      .returning();
+    if (!savedUser)
+      throw new AppError("INTERNAL_ERROR", "Failed to create or update user");
 
-  if (passwordLogin && body.password) {
-    await setPassword(db, targetUser.id, body.password);
-    await revokeUserSessions(db, targetUser.id, targetUser.id === c.get("user").id ? c.get("sessionId") : undefined);
-  }
-  if (passwordLogin && body.sendInvite) {
-    const token = await createPasswordResetToken(db, targetUser.id, targetUser.passwordHash ? "reset" : "invite");
-    const url = resetLink(c.get("config"), token, targetUser.passwordHash ? "reset" : "invite");
-    await sendMail(
-      db,
-      c.get("config"),
-      targetUser.passwordHash
-        ? passwordResetEmail(targetUser.identity, targetUser.displayName, url, RESET_TOKEN_MINUTES)
-        : inviteEmail(targetUser.identity, targetUser.displayName, c.get("user").displayName, url, INVITE_TOKEN_HOURS),
-    );
-  }
-
-  await db.delete(grants).where(eq(grants.userId, targetUser.id));
-  if (normalizedGrants.length > 0) {
-    await db
-      .insert(grants)
-      .values(
+    if (passwordLogin && body.password) {
+      await setPassword(transactionDb, savedUser.id, body.password);
+      await revokeUserSessions(
+        transactionDb,
+        savedUser.id,
+        savedUser.id === c.get("user").id ? c.get("sessionId") : undefined,
+      );
+    }
+    await tx.delete(grants).where(eq(grants.userId, savedUser.id));
+    if (normalizedGrants.length > 0) {
+      await tx.insert(grants).values(
         normalizedGrants.map((g) => ({
-          userId: targetUser.id,
+          userId: savedUser.id,
           bucket: g.bucket,
           prefix: g.prefix,
         })),
       );
-  }
+    }
 
-  await recordAudit(db, {
-    actorId: c.get("user").id,
-    action: "admin.user.upsert",
-    target: targetUser.identity,
-    outcome: "success",
-    correlationId: c.get("correlationId"),
-    details: { passwordSet: !!(passwordLogin && body.password), invited: !!(passwordLogin && body.sendInvite) },
+    await recordAudit(transactionDb, {
+      actorId: c.get("user").id,
+      action: "admin.user.upsert",
+      target: savedUser.identity,
+      outcome: "success",
+      correlationId: c.get("correlationId"),
+      details: { passwordSet: !!(passwordLogin && body.password) },
+    });
+    return savedUser;
   });
 
   return c.json({ id: targetUser.id });

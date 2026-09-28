@@ -408,16 +408,20 @@ function UserDialog({
     }
     setBusy(true);
     try {
-      await api.upsertUser({
+      const saved = await api.upsertUser({
         identity: normalizedIdentity,
         displayName: displayName.trim(),
         role,
         grants: match?.grants ?? [],
         password: askSignIn && signIn === "password" ? password : undefined,
-        sendInvite: askSignIn && signIn === "invite" ? true : undefined,
       });
       if (askSignIn && signIn === "invite") {
-        toast.add({ status: "success", title: "Invite sent", description: `Emailed to ${normalizedIdentity}.` });
+        try {
+          await api.sendUserPasswordReset(saved.id);
+          toast.add({ status: "success", title: "Invite sent", description: `Emailed to ${normalizedIdentity}.` });
+        } catch (err) {
+          notifyError("User saved, but the invite couldn't be sent", err);
+        }
       }
       onSaved();
     } catch (err) {

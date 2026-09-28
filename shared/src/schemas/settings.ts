@@ -31,8 +31,6 @@ export const upsertUserSchema = z.object({
   grants: z.array(userGrantSchema).default([]),
   /** Sets (or replaces) their password; omit to leave it as is. */
   password: passwordSchema.optional(),
-  /** Emails them a link to choose their own password. Needs SMTP. */
-  sendInvite: z.boolean().optional(),
 });
 
 export const appSettingsSchema = z.object({
