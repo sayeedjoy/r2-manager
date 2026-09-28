@@ -55,7 +55,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {children}
       <AlertDialog open={open} onOpenChange={(next) => !next && settle(false)}>
         <AlertDialogContent>
-          <AlertDialogHeader className="sm:has-data-[slot=alert-dialog-media]:grid-cols-[auto_1fr]">
+          <AlertDialogHeader className="sm:has-data-[slot=alert-dialog-media]:grid-cols-[auto_minmax(0,1fr)]">
             {options?.destructive && (
               <AlertDialogMedia className="bg-destructive/10 text-destructive">
                 <TriangleAlert />
