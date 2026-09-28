@@ -142,7 +142,7 @@ function UploadRow({ upload: u, onCancel, onDismiss }: { upload: QueuedUpload; o
 
 const STATUS_ICONS = [
   { status: "uploading", icon: <Spinner className="text-muted-foreground" /> },
-  { status: "done", icon: <CircleCheck className="text-muted-foreground" /> },
+  { status: "done", icon: <CircleCheck className="text-success" /> },
   { status: "error", icon: <CircleAlert className="text-destructive" /> },
   { status: "canceled", icon: <CircleSlash className="text-muted-foreground" /> },
 ] as const;
