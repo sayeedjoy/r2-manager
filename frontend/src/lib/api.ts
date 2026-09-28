@@ -1,6 +1,7 @@
 import type {
   ApiErrorBody,
   AppSettings,
+  AuthMode,
   ListObjectsResponse,
   ObjectMetadata,
   Role,
@@ -42,6 +43,7 @@ export interface Me {
   identity: string;
   displayName: string;
   role: Role;
+  authMode: AuthMode;
 }
 
 /** Mirrors server/src/db/schema.ts mail_messages as the mail routes return it. */

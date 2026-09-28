@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import type { HonoEnv } from "../types";
 import { users } from "../db/schema";
 import type { AccessIdentity } from "./access-jwt";
+import { BASIC_AUTH_CHALLENGE } from "./basic-auth";
 
 type Vars = { accessIdentity?: AccessIdentity; basicAuthOk?: boolean };
 
@@ -32,7 +33,7 @@ export const authGate = (): MiddlewareHandler<HonoEnv & { Variables: Vars }> => 
 
   if (!identity) {
     if (mode === "basic" || mode === "both") {
-      c.header("WWW-Authenticate", 'Basic realm="r2-manager"');
+      c.header("WWW-Authenticate", BASIC_AUTH_CHALLENGE);
     }
     throw new HTTPException(401, { message: "Authentication required" });
   }

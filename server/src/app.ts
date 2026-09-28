@@ -25,6 +25,7 @@ import settingsRoutes from "./routes/v1/settings";
 import mail from "./routes/v1/mail";
 import admin from "./routes/v1/admin";
 import internal from "./routes/v1/internal";
+import logout from "./routes/v1/logout";
 import shareGateway from "./share-gateway/routes";
 
 export interface CreateAppOptions {
@@ -67,6 +68,9 @@ export function createApp(opts: CreateAppOptions) {
 
   // Internal routes (cron trigger, mail webhook): secret/HMAC protected, not session auth.
   app.route("/api/v1/internal", internal);
+
+  // Basic Auth sign-out swaps the browser's cached credentials, so it can't sit behind that same check.
+  app.route("/api/v1/logout", logout);
 
   // Everything else under /api/v1 requires management authentication.
   const api = new Hono<HonoEnv>();

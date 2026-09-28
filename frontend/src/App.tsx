@@ -8,12 +8,14 @@ import { AdminSettingsPage } from "@/pages/admin/settings";
 import { AdminAuditPage } from "@/pages/admin/audit";
 import { AdminHealthPage } from "@/pages/admin/health";
 import { NotFoundPage } from "@/pages/not-found";
+import { SignedOutPage } from "@/pages/signed-out";
 import { UploadQueuePanel } from "@/features/upload/upload-queue-panel";
 
 export function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/signed-out" element={<SignedOutPage />} />
         <Route element={<AppShell />}>
           <Route index element={<HomePage />} />
           <Route path="/b/:bucket/*" element={<BrowserPage />} />

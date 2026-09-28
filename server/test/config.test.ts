@@ -28,6 +28,16 @@ describe("BASIC_AUTH_PASSWORD_HASH validation", () => {
     ).not.toThrow();
   });
 
+  it("refuses the username reserved for signing out", () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        BASIC_AUTH_USERNAME: "signed-out",
+        BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234",
+      }),
+    ).toThrow(/BASIC_AUTH_USERNAME.*reserved/);
+  });
+
   it("treats a blank optional value as unset", () => {
     expect(() =>
       loadConfig({

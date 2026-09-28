@@ -1,10 +1,11 @@
-import { ChevronsUpDown, Monitor, Moon, Sun } from "lucide-react";
+import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -14,7 +15,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton, useSidebar } from "@/components/ui/sidebar";
 import { useTheme } from "@/components/theme-provider";
+import { useConfirm } from "@/components/confirm-dialog";
+import { useUploadQueue } from "@/features/upload/upload-queue";
 import { useMe } from "@/hooks/use-me";
+import { signOut } from "@/lib/sign-out";
 
 const THEMES = [
   { value: "light", label: "Light", icon: Sun },
@@ -27,14 +31,33 @@ function initials(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
-/** Who's signed in, and the theme switch. Basic Auth and Access both sign out at the proxy/browser, so there's no sign-out here. */
+/** Who's signed in, the theme switch, and sign-out. */
 export function NavUser() {
   const { data: me, isLoading } = useMe();
   const { isMobile } = useSidebar();
   const { theme, setTheme } = useTheme();
+  const { uploads } = useUploadQueue();
+  const confirm = useConfirm();
 
   if (isLoading) return <SidebarMenuSkeleton showIcon />;
   if (!me) return null;
+
+  const handleSignOut = async () => {
+    // Sign-out reloads the page, which kills uploads in flight.
+    const active = uploads.filter((u) => u.status === "uploading").length;
+    if (
+      active > 0 &&
+      !(await confirm({
+        title: "Sign out and cancel uploads?",
+        description: `${active} ${active === 1 ? "upload is" : "uploads are"} still in progress and will stop.`,
+        confirmLabel: "Sign out",
+        destructive: true,
+      }))
+    ) {
+      return;
+    }
+    await signOut(me.authMode);
+  };
 
   // Basic Auth users often have the same username and display name, so show the role instead of repeating it.
   const subtitle = me.identity === me.displayName ? <span className="capitalize">{me.role}</span> : me.identity;
@@ -87,6 +110,11 @@ export function NavUser() {
                 ))}
               </DropdownMenuRadioGroup>
             </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSignOut}>
+              <LogOut />
+              Sign out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
