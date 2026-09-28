@@ -60,6 +60,7 @@ import { notifyError, notifyInfo } from "@/lib/notify";
 import { useListing } from "@/hooks/use-listing";
 import { useUploadQueue } from "@/features/upload/upload-queue";
 import { DropZone } from "@/features/upload/drop-zone";
+import { UploadDialog } from "@/features/upload/upload-dialog";
 import { filesFromDataTransfer, type DroppedFile } from "@/features/upload/file-system-entries";
 import { FileTable, type FileAction } from "@/features/files/file-table";
 import { FileGrid } from "@/features/files/file-grid";
@@ -114,6 +115,7 @@ export function BrowserPage() {
   const { data, isLoading, error, refetch } = useListing(bucket, prefix);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [shareTarget, setShareTarget] = useState<ObjectEntry | null>(null);
   const [renameTarget, setRenameTarget] = useState<ObjectEntry | null>(null);
@@ -219,22 +221,25 @@ export function BrowserPage() {
     }
   }
 
-  /** XFER-01/02: uploads dropped/selected files, preserving folder structure when present; rejects unsafe paths. */
-  function handleFiles(files: DroppedFile[]) {
+  /**
+   * XFER-01/02: uploads dropped/selected files, preserving folder structure when present; rejects unsafe paths.
+   * Returns each file's upload queue id in input order, or null where the file was skipped.
+   */
+  function handleFiles(files: DroppedFile[]): (string | null)[] {
     const skipped: string[] = [];
-    for (const { file, relativePath } of files) {
+    const ids = files.map(({ file, relativePath }) => {
       let key: string;
       try {
         key = normalizeKey(`${prefix}${relativePath}`);
       } catch (err) {
         if (err instanceof InvalidKeyError) {
           skipped.push(`"${relativePath}": ${err.message}`);
-          continue;
+          return null;
         }
         throw err;
       }
-      enqueue(file, bucket, key, refresh);
-    }
+      return enqueue(file, bucket, key, refresh);
+    });
     if (skipped.length > 0) {
       toast.add({
         status: "warning",
@@ -242,6 +247,7 @@ export function BrowserPage() {
         description: skipped.slice(0, 3).join("; ") + (skipped.length > 3 ? "; …" : ""),
       });
     }
+    return ids;
   }
 
   // FILE-04: Ctrl/⌘+A selects everything shown, Ctrl/⌘+C or X puts the selection on the in-app clipboard, and
@@ -482,7 +488,7 @@ export function BrowserPage() {
           <EmptyDescription>Drag files or folders here, or upload them from your computer.</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button onClick={() => fileInputRef.current?.click()}>
+          <Button onClick={() => setUploadOpen(true)}>
             <Upload data-icon="inline-start" />
             Upload files
           </Button>
@@ -564,7 +570,7 @@ export function BrowserPage() {
               New folder
             </Button>
             <ButtonGroup>
-              <Button onClick={() => fileInputRef.current?.click()}>
+              <Button onClick={() => setUploadOpen(true)}>
                 <Upload data-icon="inline-start" />
                 Upload
               </Button>
@@ -575,7 +581,7 @@ export function BrowserPage() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
                   <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                    <DropdownMenuItem onClick={() => setUploadOpen(true)}>
                       <FileIcon />
                       Upload files
                     </DropdownMenuItem>
@@ -737,6 +743,14 @@ export function BrowserPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {uploadOpen && (
+        <UploadDialog
+          folderName={folderName}
+          onUpload={(files) => handleFiles(files.map((file) => ({ file, relativePath: file.name })))}
+          onClose={() => setUploadOpen(false)}
+        />
+      )}
 
       {shareTarget && (
         <ShareDialog bucket={bucket} entry={shareTarget} onClose={() => setShareTarget(null)} />

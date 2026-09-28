@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@floating-ui/dom": "^1.8.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@r2-manager/shared": "workspace:*",
     "@shadcn/react": "^0.3.1",

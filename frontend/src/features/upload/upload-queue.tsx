@@ -14,7 +14,8 @@ export interface QueuedUpload {
 
 interface UploadQueueContextValue {
   uploads: QueuedUpload[];
-  enqueue: (file: File, bucket: string, key: string, onDone: () => void) => void;
+  /** Starts an upload and returns its queue id. */
+  enqueue: (file: File, bucket: string, key: string, onDone: () => void) => string;
   cancel: (id: string) => void;
   dismiss: (id: string) => void;
 }
@@ -45,6 +46,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
         );
       })
       .finally(() => handles.current.delete(id));
+    return id;
   }, []);
 
   const cancel = useCallback((id: string) => {
