@@ -20,11 +20,12 @@ pnpm dev                 # server on :8787 (tsx watch) + Vite on :5173; Vite pro
 pnpm build               # shared typecheck -> frontend build -> server tsc
 pnpm typecheck           # all packages
 pnpm lint                # only frontend has an eslint script
-pnpm test                # server vitest (runs once)
+pnpm test                # server and frontend Vitest suites (run once)
 
 # single test file / single test
 pnpm --filter server exec vitest run test/keys.test.ts
 pnpm --filter server exec vitest run -t "rejects path traversal"
+pnpm --filter frontend test
 
 # database (Drizzle, Postgres from DATABASE_URL in .env)
 pnpm db:generate         # after editing server/src/db/schema.ts -> writes server/src/db/migrations/

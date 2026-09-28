@@ -13,7 +13,7 @@
     "dev:frontend": "pnpm --filter frontend dev",
     "build": "pnpm --filter shared build && pnpm --filter frontend build && pnpm --filter server build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm --filter server test",
+    "test": "pnpm --filter server --filter frontend test",
     "lint": "pnpm -r lint",
     "db:generate": "pnpm --filter server db:generate",
     "db:migrate": "pnpm --filter server db:migrate",
