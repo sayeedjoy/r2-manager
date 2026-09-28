@@ -186,6 +186,12 @@ export function BrowserPage() {
     return sortEntries(matches, viewOptions.sort);
   }, [data, filter, typeFilter, viewOptions.sort]);
 
+  // PREV-01: the image preview steps through the images shown in this folder, in the same filter and sort order.
+  const galleryEntries = useMemo(
+    () => filteredEntries.filter((e) => e.type === "file" && previewKindFor(e.key) === "image"),
+    [filteredEntries],
+  );
+
   const selectedEntries = useMemo(
     () => filteredEntries.filter((e) => selected.has(e.key)),
     [filteredEntries, selected],
@@ -786,6 +792,8 @@ export function BrowserPage() {
           bucket={bucket}
           entry={previewTarget}
           onClose={() => setPreviewTarget(null)}
+          gallery={galleryEntries}
+          onNavigate={setPreviewTarget}
           onEdit={() => {
             setEditTarget(previewTarget);
             setPreviewTarget(null);
