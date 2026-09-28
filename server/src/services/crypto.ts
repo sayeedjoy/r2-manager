@@ -1,4 +1,12 @@
-import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  hkdfSync,
+  randomBytes,
+  scrypt,
+  timingSafeEqual,
+} from "node:crypto";
 import { promisify } from "node:util";
 
 const scryptAsync = promisify(scrypt);
@@ -38,4 +46,37 @@ export function timingSafeStringEqual(a: string, b: string): boolean {
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;
   return timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * Encrypts small secrets stored in Postgres (TOTP secrets, the SMTP password) with AES-256-GCM.
+ * The key is derived from SESSION_SECRET with HKDF, so it never sits in the database next to the ciphertext.
+ * Format: v1:<iv>:<ciphertext>:<tag>, each base64url.
+ */
+export function encryptSecret(plaintext: string, sessionSecret: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", secretBoxKey(sessionSecret), iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return ["v1", iv, ciphertext, tag].map((part) => (typeof part === "string" ? part : part.toString("base64url"))).join(":");
+}
+
+/** Reverses encryptSecret(). Throws if the value was tampered with or SESSION_SECRET changed. */
+export function decryptSecret(stored: string, sessionSecret: string): string {
+  const [version, ivPart, ctPart, tagPart] = stored.split(":");
+  if (version !== "v1" || !ivPart || ctPart === undefined || !tagPart) throw new Error("Unrecognized secret format");
+  const decipher = createDecipheriv("aes-256-gcm", secretBoxKey(sessionSecret), Buffer.from(ivPart, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
+  return Buffer.concat([decipher.update(Buffer.from(ctPart, "base64url")), decipher.final()]).toString("utf8");
+}
+
+const secretBoxKeys = new Map<string, Buffer>();
+
+function secretBoxKey(sessionSecret: string): Buffer {
+  let key = secretBoxKeys.get(sessionSecret);
+  if (!key) {
+    key = Buffer.from(hkdfSync("sha256", sessionSecret, "r2-manager", "secret-box v1", 32));
+    secretBoxKeys.set(sessionSecret, key);
+  }
+  return key;
 }

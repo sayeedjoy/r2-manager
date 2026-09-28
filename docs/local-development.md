@@ -22,13 +22,7 @@ The storage is SeaweedFS rather than MinIO because MinIO stopped publishing comm
    pnpm services:up
    ```
 
-2. Generate a password hash for Basic Authentication:
-
-   ```bash
-   pnpm --filter server run hash-password 'choose-a-password'
-   ```
-
-3. Put these values in the repo-root `.env`. Leave any other keys blank.
+2. Put these values in the repo-root `.env`. Leave any other keys blank.
 
    ```dotenv
    DATABASE_URL=postgres://r2manager:r2manager@localhost:5433/r2manager
@@ -39,10 +33,8 @@ The storage is SeaweedFS rather than MinIO because MinIO stopped publishing comm
    R2_BUCKETS=r2-manager-dev
    R2_ENDPOINT=http://localhost:8333
 
-   AUTH_MODE=basic
-   BASIC_AUTH_USERNAME=admin
-   BASIC_AUTH_PASSWORD_HASH=<output of step 2>
-   SESSION_SECRET=<any random string, 16+ characters>
+   AUTH_MODE=password
+   SESSION_SECRET=<32+ random characters, e.g. openssl rand -hex 32>
 
    APP_BASE_URL=http://localhost:5173
    PORT=8787
@@ -50,18 +42,19 @@ The storage is SeaweedFS rather than MinIO because MinIO stopped publishing comm
 
    `APP_BASE_URL` points at the Vite dev server because it proxies `/api` and `/s/` to the API on port 8787. Share links it generates therefore open through Vite.
 
-4. Create the tables, then create the first admin. Only identities with an active `users` row can sign in, and with no argument the script uses `BASIC_AUTH_USERNAME`:
+3. Create the tables:
 
    ```bash
    pnpm db:migrate
-   pnpm --filter server run create-admin
    ```
 
-5. Start the app and open http://localhost:5173. The browser asks for the Basic Authentication username and password.
+4. Start the app and open http://localhost:5173. On the first run it asks you to register the admin account (name, email, password). After that it shows the sign-in page.
 
    ```bash
    pnpm dev
    ```
+
+5. Optional: to try password reset emails and invites, set up SMTP under Admin > Email delivery (Gmail with an app password, or Brevo with an SMTP key) and use "Send test email".
 
 ## Day to day
 
@@ -75,7 +68,9 @@ To start from empty, run `docker compose down -v`. It deletes the database and e
 
 The filer UI at http://localhost:8888 shows what the app has stored under `/buckets/r2-manager-dev`.
 
-After 10 failed Basic Authentication attempts within a minute, the API refuses logins for the rest of that minute, even with the right password. If you mistype your password during setup, wait a minute before trying again.
+After 10 failed sign-ins for one email (or 20 from one address) within 15 minutes, the API refuses sign-in for that email or address until the window passes, even with the right password.
+
+Locked out of the only admin account with no email set up? Reset it from a shell with database access: `pnpm --filter server run create-admin you@example.com` (add `--reset-2fa` if the authenticator is lost too).
 
 ## Differences from R2
 

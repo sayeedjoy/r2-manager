@@ -2,11 +2,18 @@ import type {
   ApiErrorBody,
   AppSettings,
   AuthMode,
+  AuthStatus,
   ListObjectsResponse,
+  LoginResponse,
   ObjectMetadata,
+  RecoveryCodesResponse,
   Role,
+  SessionInfo,
   Share,
+  SmtpSettings,
+  TotpSetupResponse,
   TreeOperationResponse,
+  UpdateSmtpSettings,
   UserRecord,
 } from "@r2-manager/shared";
 
@@ -21,12 +28,16 @@ export class ApiError extends Error {
   }
 }
 
+/** Fired when the API says the session is gone, so RequireAuth can send the user back to the sign-in page. */
+export const UNAUTHENTICATED_EVENT = "r2m:unauthenticated";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     credentials: "include",
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   });
+  if (res.status === 401 && !path.startsWith("/api/v1/auth/")) window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as ApiErrorBody | null;
     if (body?.error) throw new ApiError(body, res.status);
@@ -44,6 +55,9 @@ export interface Me {
   displayName: string;
   role: Role;
   authMode: AuthMode;
+  hasPassword: boolean;
+  twoFactorEnabled: boolean;
+  recoveryCodesRemaining: number;
 }
 
 /** Mirrors server/src/db/schema.ts mail_messages as the mail routes return it. */
@@ -83,10 +97,40 @@ export interface UpsertUserBody {
   displayName: string;
   role: Role;
   grants: { bucket: string; prefix: string }[];
+  password?: string;
+  sendInvite?: boolean;
 }
 
 export const api = {
+  // Sign-in, first-run setup and password reset (no session needed).
+  authStatus: () => request<AuthStatus>("/api/v1/auth/status"),
+  setup: (body: { email?: string; displayName: string; password?: string; setupToken?: string }) =>
+    request<{ ok: true }>("/api/v1/auth/setup", { method: "POST", body: json(body) }),
+  login: (email: string, password: string) =>
+    request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: json({ email, password }) }),
+  verifyLogin: (body: { code: string } | { recoveryCode: string }) =>
+    request<{ ok: true }>("/api/v1/auth/login/verify", { method: "POST", body: json(body) }),
+  logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
+  forgotPassword: (email: string) =>
+    request<{ ok: true }>("/api/v1/auth/password/forgot", { method: "POST", body: json({ email }) }),
+  resetPassword: (token: string, password: string) =>
+    request<{ ok: true }>("/api/v1/auth/password/reset", { method: "POST", body: json({ token, password }) }),
+
   me: () => request<Me>("/api/v1/me"),
+
+  // The signed-in user's own password, 2FA and sessions.
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true }>("/api/v1/account/password", { method: "POST", body: json({ currentPassword, newPassword }) }),
+  startTotpSetup: () => request<TotpSetupResponse>("/api/v1/account/2fa/setup", { method: "POST" }),
+  enableTotp: (code: string) =>
+    request<RecoveryCodesResponse>("/api/v1/account/2fa/enable", { method: "POST", body: json({ code }) }),
+  disableTotp: (password: string, code: string) =>
+    request<{ ok: true }>("/api/v1/account/2fa/disable", { method: "POST", body: json({ password, code }) }),
+  regenerateRecoveryCodes: (password: string) =>
+    request<RecoveryCodesResponse>("/api/v1/account/2fa/recovery-codes", { method: "POST", body: json({ password }) }),
+  listSessions: () => request<{ sessions: SessionInfo[] }>("/api/v1/account/sessions"),
+  revokeSession: (id: string) => request<{ ok: true }>(`/api/v1/account/sessions/${id}`, { method: "DELETE" }),
+  revokeOtherSessions: () => request<{ ok: true }>("/api/v1/account/sessions/revoke-others", { method: "POST" }),
 
   listBuckets: () => request<{ buckets: string[] }>("/api/v1/buckets"),
 
@@ -238,6 +282,14 @@ export const api = {
   listUsers: () => request<{ users: UserRecord[] }>("/api/v1/admin/users"),
   upsertUser: (body: UpsertUserBody) => request<{ id: string }>("/api/v1/admin/users", { method: "POST", body: json(body) }),
   disableUser: (id: string) => request(`/api/v1/admin/users/${id}/disable`, { method: "POST" }),
+  setUserPassword: (id: string, password: string) =>
+    request<{ ok: true }>(`/api/v1/admin/users/${id}/password`, { method: "POST", body: json({ password }) }),
+  sendUserPasswordReset: (id: string) =>
+    request<{ ok: true; purpose: "reset" | "invite" }>(`/api/v1/admin/users/${id}/send-reset`, { method: "POST" }),
+  disableUserTotp: (id: string) => request<{ ok: true }>(`/api/v1/admin/users/${id}/disable-2fa`, { method: "POST" }),
+  getSmtp: () => request<SmtpSettings>("/api/v1/admin/smtp"),
+  updateSmtp: (body: UpdateSmtpSettings) => request<SmtpSettings>("/api/v1/admin/smtp", { method: "PUT", body: json(body) }),
+  sendTestEmail: (to: string) => request<{ ok: true }>("/api/v1/admin/smtp/test", { method: "POST", body: json({ to }) }),
   getSettings: () => request<AppSettings>("/api/v1/admin/settings"),
   updateSettings: (body: Partial<AppSettings>) =>
     request<AppSettings>("/api/v1/admin/settings", { method: "PUT", body: json(body) }),

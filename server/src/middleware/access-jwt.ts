@@ -2,10 +2,6 @@ import type { MiddlewareHandler } from "hono";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { HonoEnv } from "../types";
 
-export interface AccessIdentity {
-  email: string;
-}
-
 let jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
 let jwksTeamDomain: string | undefined;
 
@@ -21,13 +17,13 @@ function getJwks(teamDomain: string) {
  * AUTH-01: validates the Cloudflare Access assertion (Cf-Access-Jwt-Assertion
  * header), checking signature, issuer, audience, and expiry.
  * Sets c.set("accessIdentity", ...) on success; does not itself deny requests
- * so auth-gate.ts can combine this with Basic Auth mode (AUTH-03).
+ * so auth-gate.ts can combine this with password login (AUTH-03).
  */
-export const accessJwt = (): MiddlewareHandler<HonoEnv & { Variables: { accessIdentity?: AccessIdentity } }> => async (c, next) => {
+export const accessJwt = (): MiddlewareHandler<HonoEnv> => async (c, next) => {
   const { env } = c.get("config");
   const token = c.req.header("cf-access-jwt-assertion");
 
-  if (token && env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD) {
+  if (env.AUTH_MODE !== "password" && token && env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD) {
     try {
       const { payload } = await jwtVerify(token, getJwks(env.ACCESS_TEAM_DOMAIN), {
         issuer: `https://${env.ACCESS_TEAM_DOMAIN}`,
@@ -35,7 +31,7 @@ export const accessJwt = (): MiddlewareHandler<HonoEnv & { Variables: { accessId
       });
       const email = typeof payload.email === "string" ? payload.email : undefined;
       if (email) {
-        c.set("accessIdentity", { email });
+        c.set("accessIdentity", { email: email.trim().toLowerCase() });
       }
     } catch {
       // Leave accessIdentity unset; auth-gate treats this as unauthenticated for Access mode.

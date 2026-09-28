@@ -7,6 +7,7 @@ import {
   mailWebhookPayloadSchema,
 } from "../../mail/ingest";
 import { cleanupExpiredUploads } from "../../jobs/upload-cleanup";
+import { cleanupAuthRecords } from "../../jobs/auth-cleanup";
 import { readTextBodyWithLimit } from "../../services/request-body";
 import { assertBucketConfigured } from "../../config";
 import { timingSafeStringEqual } from "../../services/crypto";
@@ -42,7 +43,7 @@ app.post("/mail-webhook", async (c) => {
   return c.json(result);
 });
 
-/** Vercel Cron / Dokploy schedule trigger for background jobs (upload cleanup, retention). */
+/** Vercel Cron / Dokploy schedule trigger for background jobs (upload cleanup, expired sessions and reset links). */
 app.post("/cron", async (c) => {
   const { config, db, storage } = c.var;
   const secret = config.env.CRON_SECRET;
@@ -51,7 +52,8 @@ app.post("/cron", async (c) => {
     return c.json({ error: "Unauthorized" }, 401);
 
   const expiredUploads = await cleanupExpiredUploads(db, storage);
-  return c.json({ ok: true, expiredUploads });
+  const expiredAuth = await cleanupAuthRecords(db);
+  return c.json({ ok: true, expiredUploads, expiredAuth });
 });
 
 export default app;

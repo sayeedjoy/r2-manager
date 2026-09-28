@@ -31,12 +31,11 @@ pnpm --filter frontend test
 pnpm db:generate         # after editing server/src/db/schema.ts -> writes server/src/db/migrations/
 pnpm db:migrate
 
-pnpm --filter server run hash-password 'pw'   # scrypt hash for BASIC_AUTH_PASSWORD_HASH
-pnpm --filter server run create-admin [identity]   # first admin row; defaults to BASIC_AUTH_USERNAME
+pnpm --filter server run create-admin <email> [name] [--reset-2fa]   # recovery only; first-run setup happens in the browser
 pnpm --filter frontend format                 # prettier (no semicolons, double quotes, tailwind class sorting)
 ```
 
-`server/src/config.ts` validates env with zod. The server **refuses to boot** unless `AUTH_MODE` is set and its matching vars are filled in: Access needs `ACCESS_TEAM_DOMAIN`/`ACCESS_AUD`, Basic needs `BASIC_AUTH_USERNAME`/`BASIC_AUTH_PASSWORD_HASH`. See `.env.example`.
+`server/src/config.ts` validates env with zod. The server **refuses to boot** unless `AUTH_MODE` (`password` | `access` | `both`) is set and its matching vars are filled in: Access needs `ACCESS_TEAM_DOMAIN`/`ACCESS_AUD`. `SESSION_SECRET` also keys the AES-GCM encryption of TOTP secrets and the SMTP password in Postgres. See `.env.example`.
 
 ## Architecture
 
@@ -47,7 +46,9 @@ pnpm --filter frontend format                 # prettier (no semicolons, double 
 - `entry/vercel.ts` is re-exported by `api/[[...route]].ts`. `vercel.json` rewrites `/api/*` and `/s/*` to this function.
 
 The app has three separately authenticated route trees:
-1. **`/api/v1/*`** is the management API. The chain is `accessJwt` → `basicAuth` → `authGate`. `authGate` combines the modes according to `AUTH_MODE`, then resolves the identity to an **active row in the `users` table**. It sets `c.var.user`, or returns 403 if there is no such user.
+1. **`/api/v1/*`** is the management API. The chain is `accessJwt` → `authGate`. `authGate` combines the Access JWT and the password-session cookie (`services/sessions.ts`, hashed tokens in the `sessions` table) according to `AUTH_MODE`, then resolves the identity (a lowercased email) to an **active row in the `users` table**. It sets `c.var.user` and `c.var.sessionId`, or returns 401/403.
+   - **`/api/v1/auth/*`** (`routes/v1/auth.ts`) sits outside the gate: status, first-run `setup` (open until an admin exists, then closed for good through an `app_settings` flag), `login` + `login/verify` (TOTP or recovery code; a 2FA account first gets an `mfaPending` session), `logout`, `password/forgot` and `password/reset`. `/api/v1/account/*` holds the signed-in user's password, 2FA and sessions.
+   - `sameOriginMutations` refuses cross-site mutations on `/api/*`. The session cookie is also `SameSite=Strict`.
 2. **`/s/:token`** is the public share gateway (`share-gateway/`). It has no management auth. It gets strict CSP, `noindex` and `no-store` headers, Postgres-backed rate limiting and a server-rendered password page. Share visitors never load the SPA.
 3. **`/api/v1/internal/*`** covers `/cron`, protected by the `x-cron-secret` header, and `/mail-webhook`, which checks an HMAC in `x-webhook-signature` against `MAIL_WEBHOOK_SECRET`.
 
@@ -65,7 +66,8 @@ The app has three separately authenticated route trees:
 
 - **Uploads skip the server.** The server creates the multipart upload, presigns part URLs, then completes or aborts it (`services/uploads.ts`, `routes/v1/uploads.ts`). The browser PUTs parts straight to R2 (`frontend/src/features/upload/multipart-client.ts`). Orphaned uploads are cleaned up by `jobs/upload-cleanup.ts` through `/internal/cron`.
 - **Folder operations are cursor-batched.** `services/tree-ops.ts` `runTreeBatch` processes one page of keys per call and returns a cursor plus per-item results. It is not atomic across the tree. The client loops until the cursor is exhausted.
-- **Rate limits and job state live in Postgres.** There is no Redis.
+- **Rate limits and job state live in Postgres.** There is no Redis. Login, 2FA, setup and reset endpoints count failures per IP and per email or user.
+- **SMTP settings live in `app_settings`** (key `smtp`) and are edited at Admin > Email delivery, not in env. `services/mailer.ts` sends with nodemailer.
 - Share download limits use a single conditional `UPDATE ... WHERE reserved < max_downloads RETURNING` so concurrent requests can't exceed the limit. Each share has a delivery mode: `stream` goes through the app, and `redirect` sends a short-lived presigned URL.
 - `db/client.ts` and `loadConfig()` are module-level singletons. The DB pool size is 1 when `VERCEL` is set.
 

@@ -1,34 +1,89 @@
 import { config as loadDotenv } from "dotenv";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { users } from "../db/schema";
+import { eq } from "drizzle-orm";
+import { emailSchema, passwordSchema } from "@r2-manager/shared";
+import { appSettings, sessions, users } from "../db/schema";
+import { hashPassword } from "../services/crypto";
 
 loadDotenv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
-// authGate only lets in identities with an active users row, so the first
-// admin has to be created out of band. The identity is the Access email, or
-// BASIC_AUTH_USERNAME in basic mode (the default when no argument is given).
+const USAGE = `Usage: pnpm --filter server run create-admin <email> [display name] [--reset-2fa]
+
+Normally the first admin registers in the browser on first run. Use this to recover
+when that isn't possible, e.g. the only admin forgot their password and email isn't
+set up. It creates or promotes <email> to an active admin, sets a new password
+(prompted for, or taken from ADMIN_PASSWORD), and signs that account out everywhere.
+With --reset-2fa it also turns off the account's two-factor authentication.`;
+
+/** Reads a line from the terminal without echoing it. */
+function promptHidden(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    const write = (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput;
+    (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = (s: string) => {
+      write.call(rl, s.startsWith(question) ? s : "");
+    };
+    rl.question(question, (answer) => {
+      rl.close();
+      process.stdout.write("\n");
+      resolve(answer);
+    });
+  });
+}
+
 async function main() {
-  const identity = process.argv[2] ?? process.env.BASIC_AUTH_USERNAME;
-  const displayName = process.argv[3] ?? identity;
-  if (!identity) {
-    console.error("Usage: pnpm --filter server run create-admin <identity> [display name]");
+  const args = process.argv.slice(2);
+  const reset2fa = args.includes("--reset-2fa");
+  const [rawEmail, ...nameParts] = args.filter((a) => !a.startsWith("--"));
+  const parsedEmail = emailSchema.safeParse(rawEmail ?? "");
+  if (!parsedEmail.success) {
+    console.error(USAGE);
     process.exit(1);
   }
+  const email = parsedEmail.data;
+  const displayName = nameParts.join(" ") || email;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
+  const accessOnly = process.env.AUTH_MODE === "access";
+  let passwordHash: string | undefined;
+  if (!accessOnly) {
+    const password = process.env.ADMIN_PASSWORD ?? (await promptHidden("New password: "));
+    const checked = passwordSchema.safeParse(password);
+    if (!checked.success) {
+      console.error(checked.error.issues[0]?.message ?? "Invalid password");
+      process.exit(1);
+    }
+    passwordHash = await hashPassword(password);
+  }
+
   const sql = postgres(databaseUrl, { max: 1 });
   const db = drizzle(sql);
-  await db
+  const twoFactorReset = reset2fa
+    ? { totpSecret: null, totpPendingSecret: null, totpEnabledAt: null, totpLastStep: null, recoveryCodeHashes: [] }
+    : {};
+  const passwordFields = passwordHash ? { passwordHash, passwordChangedAt: new Date() } : {};
+  const [user] = await db
     .insert(users)
-    .values({ identity, displayName: displayName!, role: "admin" })
-    .onConflictDoUpdate({ target: users.identity, set: { role: "admin", status: "active" } });
+    .values({ identity: email, displayName, role: "admin", ...passwordFields })
+    .onConflictDoUpdate({
+      target: users.identity,
+      set: { role: "admin", status: "active", ...passwordFields, ...twoFactorReset },
+    })
+    .returning({ id: users.id });
+  await db.delete(sessions).where(eq(sessions.userId, user!.id));
+  // An admin now exists, so the browser's first-run setup must stay closed.
+  await db
+    .insert(appSettings)
+    .values({ key: "setup", value: { completedAt: new Date().toISOString() } })
+    .onConflictDoNothing();
   await sql.end();
 
-  console.log(`Admin "${identity}" is ready.`);
+  console.log(`Admin "${email}" is ready.${reset2fa ? " Two-factor authentication is off." : ""}`);
 }
 
 main().catch((err) => {

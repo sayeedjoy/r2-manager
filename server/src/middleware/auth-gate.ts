@@ -1,48 +1,45 @@
 import { eq } from "drizzle-orm";
 import type { MiddlewareHandler } from "hono";
-import { HTTPException } from "hono/http-exception";
+import { AppError } from "@r2-manager/shared";
 import type { HonoEnv } from "../types";
 import { users } from "../db/schema";
-import type { AccessIdentity } from "./access-jwt";
-import { BASIC_AUTH_CHALLENGE } from "./basic-auth";
+import { readSession, touchSession } from "../services/sessions";
 
-type Vars = { accessIdentity?: AccessIdentity; basicAuthOk?: boolean };
+type UserRow = typeof users.$inferSelect;
 
 /**
- * AUTH-03: combines Access and Basic Auth modes per configuration. Both must
- * pass when AUTH_MODE is "both"; an unconfigured mode always denies (config.ts
- * refuses to boot without at least one mode set up).
- * Resolves the authenticated identity to a users row and sets c.set("user").
+ * AUTH-03: combines Cloudflare Access and password sessions per AUTH_MODE.
+ * - "access": the Access email must belong to an active user.
+ * - "password": a valid session cookie (with 2FA completed, if the user has it on).
+ * - "both": both, and the Access email must be the session user's email, so one person's
+ *   Access login can't carry someone else's app session.
+ * Resolves the identity to an active users row and sets c.set("user").
  */
-export const authGate = (): MiddlewareHandler<HonoEnv & { Variables: Vars }> => async (c, next) => {
+export const authGate = (): MiddlewareHandler<HonoEnv> => async (c, next) => {
   const { env } = c.get("config");
+  const db = c.get("db");
   const mode = env.AUTH_MODE;
+  const accessEmail = c.get("accessIdentity")?.email;
 
-  let identity: string | undefined;
+  let record: UserRow | undefined;
 
   if (mode === "access") {
-    identity = c.get("accessIdentity")?.email;
-  } else if (mode === "basic") {
-    identity = c.get("basicAuthOk") ? (env.BASIC_AUTH_USERNAME ?? undefined) : undefined;
+    if (!accessEmail) throw new AppError("UNAUTHENTICATED", "Cloudflare Access sign-in required");
+    record = await db.query.users.findFirst({ where: eq(users.identity, accessEmail) });
   } else {
-    // both: require Access identity AND a passing Basic Auth check
-    const accessOk = !!c.get("accessIdentity");
-    const basicOk = !!c.get("basicAuthOk");
-    identity = accessOk && basicOk ? c.get("accessIdentity")!.email : undefined;
-  }
-
-  if (!identity) {
-    if (mode === "basic" || mode === "both") {
-      c.header("WWW-Authenticate", BASIC_AUTH_CHALLENGE);
+    if (mode === "both" && !accessEmail) throw new AppError("UNAUTHENTICATED", "Cloudflare Access sign-in required");
+    const found = await readSession(c);
+    if (!found || found.session.mfaPending) throw new AppError("UNAUTHENTICATED", "Sign in to continue");
+    if (mode === "both" && found.user.identity !== accessEmail) {
+      throw new AppError("UNAUTHORIZED", "Your Cloudflare Access login and app account are for different emails");
     }
-    throw new HTTPException(401, { message: "Authentication required" });
+    await touchSession(db, found.session);
+    c.set("sessionId", found.session.id);
+    record = found.user;
   }
-
-  const db = c.get("db");
-  const record = await db.query.users.findFirst({ where: eq(users.identity, identity) });
 
   if (!record || record.status !== "active") {
-    throw new HTTPException(403, { message: "No active account for this identity" });
+    throw new AppError("UNAUTHORIZED", "No active account for this identity");
   }
 
   c.set("user", {

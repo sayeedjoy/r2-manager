@@ -6,7 +6,7 @@ A self-hosted file manager for Cloudflare R2 buckets: browsing, uploads, preview
 
 Both release stages from the SRS's release plan (§9) are implemented:
 
-- **Core:** authentication (Cloudflare Access and/or Basic Auth), RBAC, bucket browsing (list/grid, name filter), folder operations, drag-and-drop multipart upload/download, previews (PDF/image/text/Markdown/CSV/JSON/JSONL), object operations, and the audit trail.
+- **Core:** authentication (email + password with optional TOTP 2FA and password reset, and/or Cloudflare Access), RBAC, bucket browsing (list/grid, name filter), folder operations, drag-and-drop multipart upload/download, previews (PDF/image/text/Markdown/CSV/JSON/JSONL), object operations, and the audit trail.
 - **Complete feature set:** folder upload (drag-and-drop and picker, preserving hierarchy), bulk move/copy/delete/download-as-zip, a metadata editor, an in-browser text/Markdown/CSV/JSON editor with ETag conflict detection, protected shares with password/expiry/download-limit and a revoke UI, Email Routing ingestion with an attachment inbox, and admin settings/users/grants/audit/health.
 
 **Later enhancements** (SRS §9, explicitly out of scope for now): soft delete/retention policies, full-text/advanced search, malware scanning, and format-aware editors (CSV table editing, diff-before-save).
@@ -17,10 +17,9 @@ Both release stages from the SRS's release plan (§9) are implemented:
 pnpm install
 cp .env.example .env
 pnpm services:up                                          # Postgres + SeaweedFS (S3-compatible R2 stand-in) via Docker
-pnpm --filter server run hash-password 'your-password'   # paste result into BASIC_AUTH_PASSWORD_HASH
 pnpm db:migrate
-pnpm --filter server run create-admin                     # first admin; defaults to BASIC_AUTH_USERNAME
 pnpm dev                                                  # API on :8787, Vite frontend on :5173
+# open http://localhost:5173 and register the admin account on the first-run screen
 ```
 
 See [docs/local-development.md](docs/local-development.md) for the `.env` values that match the Docker services.

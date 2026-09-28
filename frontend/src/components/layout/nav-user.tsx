@@ -1,4 +1,5 @@
-import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ChevronsUpDown, LogOut, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -59,7 +60,7 @@ export function NavUser() {
     await signOut(me.authMode);
   };
 
-  // Basic Auth users often have the same username and display name, so show the role instead of repeating it.
+  // People often use their email as their display name, so show the role instead of repeating it.
   const subtitle = me.identity === me.displayName ? <span className="capitalize">{me.role}</span> : me.identity;
 
   const avatar = (
@@ -111,6 +112,10 @@ export function NavUser() {
               </DropdownMenuRadioGroup>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link to="/account" />}>
+              <ShieldCheck />
+              Account and security
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleSignOut}>
               <LogOut />
               Sign out

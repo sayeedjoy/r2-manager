@@ -1,7 +1,20 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, MoreHorizontal, Plus, Trash2, TriangleAlert, UserPen, UserPlus, UserX, Users } from "lucide-react";
-import { ROLES, type Role, type UserRecord } from "@r2-manager/shared";
+import {
+  KeyRound,
+  LockKeyhole,
+  Mail,
+  MoreHorizontal,
+  Plus,
+  ShieldOff,
+  Trash2,
+  TriangleAlert,
+  UserPen,
+  UserPlus,
+  UserX,
+  Users,
+} from "lucide-react";
+import { ROLES, usesPasswordLogin, type Role, type UserRecord } from "@r2-manager/shared";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +59,10 @@ import { pluralize } from "@/lib/format";
 import { notifyError } from "@/lib/notify";
 import { useBuckets } from "@/hooks/use-listing";
 import { useMe } from "@/hooks/use-me";
+import { useAuthStatus } from "@/hooks/use-auth-status";
+import { NewPasswordFields } from "@/components/auth/new-password-fields";
+import { validateNewPassword } from "@/lib/password";
+import { toast } from "@/components/toaster";
 
 type Grant = UserRecord["grants"][number];
 
@@ -66,8 +83,11 @@ export function AdminUsersPage() {
   const confirm = useConfirm();
   const { data: me } = useMe();
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ["admin", "users"], queryFn: api.listUsers });
+  const { data: authStatus } = useAuthStatus();
   const [editing, setEditing] = useState<UserRecord | "new" | null>(null);
   const [managingAccess, setManagingAccess] = useState<UserRecord | null>(null);
+  const [settingPassword, setSettingPassword] = useState<UserRecord | null>(null);
+  const passwordLogin = !!me && usesPasswordLogin(me.authMode);
 
   const users = data?.users ?? [];
   const disabledCount = users.filter((u) => u.status === "disabled").length;
@@ -88,6 +108,37 @@ export function AdminUsersPage() {
       await api.disableUser(user.id);
     } catch (err) {
       notifyError("Couldn't disable the user", err);
+    }
+    refresh();
+  }
+
+  async function handleSendReset(user: UserRecord) {
+    try {
+      const res = await api.sendUserPasswordReset(user.id);
+      toast.add({
+        status: "success",
+        title: res.purpose === "invite" ? "Invite sent" : "Reset link sent",
+        description: `Emailed to ${user.identity}.`,
+      });
+    } catch (err) {
+      notifyError("Couldn't send the email", err);
+    }
+  }
+
+  async function handleDisableTotp(user: UserRecord) {
+    const ok = await confirm({
+      title: `Turn off two-factor authentication for ${user.identity}?`,
+      description:
+        "Only do this if they've lost their authenticator and recovery codes. Their password alone signs them in until they set it up again.",
+      confirmLabel: "Turn off",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await api.disableUserTotp(user.id);
+      toast.add({ status: "success", title: "Two-factor authentication turned off" });
+    } catch (err) {
+      notifyError("Couldn't turn off two-factor authentication", err);
     }
     refresh();
   }
@@ -169,16 +220,20 @@ export function AdminUsersPage() {
                   <AccessSummary user={u} />
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                  <Badge variant={u.status === "active" ? "secondary" : "destructive"} className="capitalize">
-                    {u.status}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant={u.status === "active" ? "secondary" : "destructive"} className="capitalize">
+                      {u.status}
+                    </Badge>
+                    {passwordLogin && u.status === "active" && !u.hasPassword && <Badge variant="outline">No password yet</Badge>}
+                    {u.twoFactorEnabled && <Badge variant="outline">2FA</Badge>}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${u.identity}`} />}>
                       <MoreHorizontal />
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuContent align="end" className="w-52">
                       <DropdownMenuGroup>
                         <DropdownMenuItem onClick={() => setEditing(u)}>
                           <UserPen />
@@ -189,6 +244,29 @@ export function AdminUsersPage() {
                           Manage access
                         </DropdownMenuItem>
                       </DropdownMenuGroup>
+                      {/* Your own password and 2FA live under Account and security, behind a password check. */}
+                      {passwordLogin && u.id !== me?.id && (
+                        <DropdownMenuGroup>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setSettingPassword(u)}>
+                            <LockKeyhole />
+                            Set password
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSendReset(u)}
+                            disabled={!authStatus?.passwordResetAvailable || u.status !== "active"}
+                          >
+                            <Mail />
+                            {u.hasPassword ? "Email reset link" : "Email invite"}
+                          </DropdownMenuItem>
+                          {u.twoFactorEnabled && (
+                            <DropdownMenuItem variant="destructive" onClick={() => handleDisableTotp(u)}>
+                              <ShieldOff />
+                              Turn off 2FA
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuGroup>
+                      )}
                       {/* Hidden for yourself so an admin can't lock themselves out. */}
                       {u.status === "active" && u.id !== me?.id && (
                         <DropdownMenuGroup>
@@ -233,9 +311,22 @@ export function AdminUsersPage() {
         <UserDialog
           user={editing === "new" ? null : editing}
           existing={users}
+          passwordLogin={passwordLogin}
+          canInvite={!!authStatus?.passwordResetAvailable}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {settingPassword && (
+        <SetPasswordDialog
+          user={settingPassword}
+          onClose={() => setSettingPassword(null)}
+          onSaved={() => {
+            setSettingPassword(null);
             refresh();
           }}
         />
@@ -279,27 +370,55 @@ function AccessSummary({ user }: { user: UserRecord }) {
 function UserDialog({
   user,
   existing,
+  passwordLogin,
+  canInvite,
   onClose,
   onSaved,
 }: {
   user: UserRecord | null;
   existing: UserRecord[];
+  /** The app runs its own sign-in, so a new user needs a password or an invite. */
+  passwordLogin: boolean;
+  /** SMTP is set up, so an invite email can be sent. */
+  canInvite: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [identity, setIdentity] = useState(user?.identity ?? "");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [role, setRole] = useState<Role>(user?.role ?? "viewer");
+  const [signIn, setSignIn] = useState<"invite" | "password">(canInvite ? "invite" : "password");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const match = user ?? existing.find((u) => u.identity === identity.trim());
+  const normalizedIdentity = identity.trim().toLowerCase();
+  const match = user ?? existing.find((u) => u.identity === normalizedIdentity);
+  // Only brand-new accounts get sign-in options here; existing ones use "Set password" or "Email reset link".
+  const askSignIn = passwordLogin && !match;
+  const passwordErrors = askSignIn && signIn === "password" ? validateNewPassword(password, confirm) : {};
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!identity.trim() || !displayName.trim()) return;
+    if (Object.keys(passwordErrors).length > 0) {
+      setShowErrors(true);
+      return;
+    }
     setBusy(true);
     try {
-      await api.upsertUser({ identity: identity.trim(), displayName: displayName.trim(), role, grants: match?.grants ?? [] });
+      await api.upsertUser({
+        identity: normalizedIdentity,
+        displayName: displayName.trim(),
+        role,
+        grants: match?.grants ?? [],
+        password: askSignIn && signIn === "password" ? password : undefined,
+        sendInvite: askSignIn && signIn === "invite" ? true : undefined,
+      });
+      if (askSignIn && signIn === "invite") {
+        toast.add({ status: "success", title: "Invite sent", description: `Emailed to ${normalizedIdentity}.` });
+      }
       onSaved();
     } catch (err) {
       notifyError("Couldn't save the user", err);
@@ -310,8 +429,8 @@ function UserDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={handleSubmit} className="contents">
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
+        <form onSubmit={handleSubmit} className="contents" noValidate>
           <DialogHeader>
             <DialogTitle>{user ? "Edit user" : "Add user"}</DialogTitle>
             <DialogDescription>
@@ -321,14 +440,15 @@ function UserDialog({
           <FieldGroup>
             {!user && (
               <Field>
-                <FieldLabel htmlFor="user-identity">Identity</FieldLabel>
+                <FieldLabel htmlFor="user-identity">Email</FieldLabel>
                 <Input
                   id="user-identity"
+                  type="email"
                   value={identity}
                   onChange={(e) => {
                     setIdentity(e.target.value);
                     // Start from the existing user's role so re-adding them doesn't quietly change it.
-                    const found = existing.find((u) => u.identity === e.target.value.trim());
+                    const found = existing.find((u) => u.identity === e.target.value.trim().toLowerCase());
                     if (found) {
                       setRole(found.role);
                       setDisplayName((current) => current || found.displayName);
@@ -341,7 +461,9 @@ function UserDialog({
                 <FieldDescription>
                   {match
                     ? "This user already exists. Saving updates their name and role and keeps their access."
-                    : "The Access email or Basic Auth username they sign in with."}
+                    : passwordLogin
+                      ? "They sign in with this email."
+                      : "The email they sign in to Cloudflare Access with."}
                 </FieldDescription>
               </Field>
             )}
@@ -365,6 +487,45 @@ function UserDialog({
                 ))}
               </RadioGroup>
             </FieldSet>
+            {askSignIn && (
+              <FieldSet>
+                <FieldLegend variant="label">How they'll sign in</FieldLegend>
+                <RadioGroup value={signIn} onValueChange={(value) => setSignIn(value as "invite" | "password")}>
+                  <FieldLabel htmlFor="signin-invite">
+                    <Field orientation="horizontal" data-disabled={!canInvite || undefined}>
+                      <FieldContent>
+                        <FieldTitle>Email an invite</FieldTitle>
+                        <FieldDescription>
+                          {canInvite
+                            ? "They get a link to choose their own password. It expires in 3 days."
+                            : "Set up email delivery first, under Admin > Email delivery."}
+                        </FieldDescription>
+                      </FieldContent>
+                      <RadioGroupItem value="invite" id="signin-invite" disabled={!canInvite} />
+                    </Field>
+                  </FieldLabel>
+                  <FieldLabel htmlFor="signin-password">
+                    <Field orientation="horizontal">
+                      <FieldContent>
+                        <FieldTitle>Set a password now</FieldTitle>
+                        <FieldDescription>Share it with them yourself. They can change it under Account and security.</FieldDescription>
+                      </FieldContent>
+                      <RadioGroupItem value="password" id="signin-password" />
+                    </Field>
+                  </FieldLabel>
+                </RadioGroup>
+              </FieldSet>
+            )}
+            {askSignIn && signIn === "password" && (
+              <NewPasswordFields
+                idPrefix="user"
+                password={password}
+                confirm={confirm}
+                onPasswordChange={setPassword}
+                onConfirmChange={setConfirm}
+                errors={showErrors ? passwordErrors : undefined}
+              />
+            )}
           </FieldGroup>
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" disabled={busy} />}>Cancel</DialogClose>
@@ -476,6 +637,67 @@ function GrantsDialog({ user, onClose, onSaved }: { user: UserRecord; onClose: (
             <Button type="submit" disabled={busy}>
               {busy && <Spinner data-icon="inline-start" />}
               Save access
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Sets a user's password by hand (e.g. when email isn't set up) and signs them out everywhere. */
+function SetPasswordDialog({ user, onClose, onSaved }: { user: UserRecord; onClose: () => void; onSaved: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showErrors, setShowErrors] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const errors = validateNewPassword(password, confirm);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (Object.keys(errors).length > 0) {
+      setShowErrors(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.setUserPassword(user.id, password);
+      toast.add({ status: "success", title: "Password set", description: `${user.displayName} was signed out everywhere.` });
+      onSaved();
+    } catch (err) {
+      notifyError("Couldn't set the password", err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <form onSubmit={handleSubmit} className="contents" noValidate>
+          <DialogHeader>
+            <DialogTitle>Set password</DialogTitle>
+            <DialogDescription>
+              For {user.identity}. They're signed out everywhere and sign in with this next. Share it with them securely.
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <NewPasswordFields
+              idPrefix="admin-set"
+              label="New password"
+              password={password}
+              confirm={confirm}
+              onPasswordChange={setPassword}
+              onConfirmChange={setConfirm}
+              errors={showErrors ? errors : undefined}
+              autoFocus
+            />
+          </FieldGroup>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" disabled={busy} />}>Cancel</DialogClose>
+            <Button type="submit" disabled={busy}>
+              {busy && <Spinner data-icon="inline-start" />}
+              Set password
             </Button>
           </DialogFooter>
         </form>

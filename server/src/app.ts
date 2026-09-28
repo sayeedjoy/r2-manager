@@ -11,8 +11,8 @@ import type { Storage } from "./storage/storage";
 import { correlationId } from "./middleware/correlation-id";
 import { securityHeaders } from "./middleware/security-headers";
 import { accessJwt } from "./middleware/access-jwt";
-import { basicAuth } from "./middleware/basic-auth";
 import { authGate } from "./middleware/auth-gate";
+import { sameOriginMutations } from "./middleware/same-origin";
 
 import me from "./routes/v1/me";
 import buckets from "./routes/v1/buckets";
@@ -25,7 +25,8 @@ import settingsRoutes from "./routes/v1/settings";
 import mail from "./routes/v1/mail";
 import admin from "./routes/v1/admin";
 import internal from "./routes/v1/internal";
-import logout from "./routes/v1/logout";
+import auth from "./routes/v1/auth";
+import account from "./routes/v1/account";
 import shareGateway from "./share-gateway/routes";
 
 export interface CreateAppOptions {
@@ -69,15 +70,18 @@ export function createApp(opts: CreateAppOptions) {
   // Internal routes (cron trigger, mail webhook): secret/HMAC protected, not session auth.
   app.route("/api/v1/internal", internal);
 
-  // Basic Auth sign-out swaps the browser's cached credentials, so it can't sit behind that same check.
-  app.route("/api/v1/logout", logout);
+  // Session cookies authenticate the API, so refuse mutations another site starts (CSRF).
+  app.use("/api/*", sameOriginMutations());
+
+  // Sign-in, first-run setup and password reset: reachable before there's a session.
+  app.route("/api/v1/auth", auth);
 
   // Everything else under /api/v1 requires management authentication.
   const api = new Hono<HonoEnv>();
   api.use("*", accessJwt());
-  api.use("*", basicAuth());
   api.use("*", authGate());
   api.route("/me", me);
+  api.route("/account", account);
   api.route("/buckets", buckets);
   api.route("/objects", objects);
   api.route("/folders", folders);

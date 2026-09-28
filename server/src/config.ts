@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AppError, SIGNED_OUT_USERNAME } from "@r2-manager/shared";
+import { AppError, AUTH_MODES } from "@r2-manager/shared";
 
 const envSchema = z
   .object({
@@ -18,12 +18,18 @@ const envSchema = z
     R2_BUCKETS: z.string().min(1),
     R2_ENDPOINT: z.string().url().optional(),
 
-    AUTH_MODE: z.enum(["access", "basic", "both"]),
+    AUTH_MODE: z.enum(AUTH_MODES, {
+      errorMap: () => ({
+        message: `must be one of ${AUTH_MODES.join(", ")} ("basic" was replaced by "password": email + password sign-in)`,
+      }),
+    }),
     ACCESS_TEAM_DOMAIN: z.string().optional(),
     ACCESS_AUD: z.string().optional(),
-    BASIC_AUTH_USERNAME: z.string().optional(),
-    BASIC_AUTH_PASSWORD_HASH: z.string().optional(),
+    // Signs share cookies and derives the key that encrypts TOTP secrets and the SMTP password at rest.
+    // Changing it disables everyone's 2FA secrets and the saved SMTP password, so treat it as permanent.
     SESSION_SECRET: z.string().min(32),
+    // Optional: when set, first-run admin registration (/setup) also asks for this value.
+    SETUP_TOKEN: z.string().min(16).optional(),
 
     MAIL_WEBHOOK_SECRET: z.string().min(32).optional(),
     CRON_SECRET: z.string().min(32).optional(),
@@ -45,40 +51,13 @@ const envSchema = z
         });
       }
     }
-    // AUTH-03: deployment must select Access, Basic, or both; refuse to start unconfigured.
+    // AUTH-03: deployment must select Access, password login, or both; refuse to start unconfigured.
     if (env.AUTH_MODE === "access" || env.AUTH_MODE === "both") {
       if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
             "ACCESS_TEAM_DOMAIN and ACCESS_AUD are required when AUTH_MODE includes 'access'",
-        });
-      }
-    }
-    if (env.AUTH_MODE === "basic" || env.AUTH_MODE === "both") {
-      if (!env.BASIC_AUTH_USERNAME || !env.BASIC_AUTH_PASSWORD_HASH) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD_HASH are required when AUTH_MODE includes 'basic'",
-        });
-      } else if (
-        !/^scrypt:[0-9a-f]+:[0-9a-f]+$/.test(env.BASIC_AUTH_PASSWORD_HASH)
-      ) {
-        // A plain password or a bcrypt hash here would otherwise boot fine and reject every login.
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["BASIC_AUTH_PASSWORD_HASH"],
-          message:
-            "must be the output of `pnpm --filter server run hash-password '<password>'` (starts with \"scrypt:\"), not the password itself",
-        });
-      }
-      if (env.BASIC_AUTH_USERNAME === SIGNED_OUT_USERNAME) {
-        // basic-auth.ts rejects this username outright; it's what sign-out leaves in the browser.
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["BASIC_AUTH_USERNAME"],
-          message: `"${SIGNED_OUT_USERNAME}" is reserved for signing out; pick another username`,
         });
       }
     }

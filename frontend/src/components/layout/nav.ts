@@ -1,10 +1,12 @@
-import { HeartPulse, Inbox, ScrollText, Settings, Users, type LucideIcon } from "lucide-react";
+import { HeartPulse, Inbox, Mail, ScrollText, Settings, Users, type LucideIcon } from "lucide-react";
 import type { Capability } from "@r2-manager/shared";
 
 export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /** Only relevant when the app runs its own password sign-in (not AUTH_MODE=access). */
+  passwordLoginOnly?: boolean;
 }
 
 export interface NavSection {
@@ -27,6 +29,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/admin/users", label: "Users", icon: Users },
       { to: "/admin/settings", label: "Settings", icon: Settings },
+      { to: "/admin/email", label: "Email delivery", icon: Mail, passwordLoginOnly: true },
       { to: "/admin/audit", label: "Audit log", icon: ScrollText },
       { to: "/admin/health", label: "Health", icon: HeartPulse },
     ],

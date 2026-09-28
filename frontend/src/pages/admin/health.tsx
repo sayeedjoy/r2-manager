@@ -49,8 +49,14 @@ const CHECKS: Record<string, CheckInfo> = {
   authMode: {
     label: "Authentication",
     icon: ShieldCheck,
-    ok: "An auth mode is configured and this request passed it.",
+    ok: "An auth mode (password sign-in and/or Cloudflare Access) is configured and this request passed it.",
     error: "Authentication isn't configured correctly.",
+  },
+  smtp: {
+    label: "Email delivery",
+    icon: Mail,
+    ok: "SMTP is set up, so password reset links and invites can be sent.",
+    error: "SMTP isn't set up, so password reset and invite emails can't be sent. Configure it under Email delivery.",
   },
   mailWebhook: {
     label: "Mail webhook",

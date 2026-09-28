@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { Database, HardDrive } from "lucide-react";
-import { roleHasCapability } from "@r2-manager/shared";
+import { roleHasCapability, usesPasswordLogin } from "@r2-manager/shared";
 import {
   Sidebar,
   SidebarContent,
@@ -51,9 +51,11 @@ export function AppSidebar() {
             <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {section.items.map((item) => (
-                  <NavLink key={item.to} item={item} isActive={pathname === item.to} />
-                ))}
+                {section.items
+                  .filter((item) => !item.passwordLoginOnly || (me && usesPasswordLogin(me.authMode)))
+                  .map((item) => (
+                    <NavLink key={item.to} item={item} isActive={pathname === item.to} />
+                  ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

@@ -8,54 +8,48 @@ const base = {
   R2_ACCESS_KEY_ID: "key",
   R2_SECRET_ACCESS_KEY: "secret",
   R2_BUCKETS: "bucket",
-  AUTH_MODE: "basic",
-  BASIC_AUTH_USERNAME: "admin",
+  AUTH_MODE: "password",
   SESSION_SECRET: "0123456789abcdef0123456789abcdef",
 };
 
 afterEach(() => resetConfigForTests());
 
-describe("BASIC_AUTH_PASSWORD_HASH validation", () => {
-  it("refuses to start with a plain password instead of a hash", () => {
-    expect(() =>
-      loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "hunter2" }),
-    ).toThrow(/BASIC_AUTH_PASSWORD_HASH.*hash-password/);
+describe("AUTH_MODE validation (AUTH-03)", () => {
+  it("boots in password mode with no extra auth settings", () => {
+    expect(() => loadConfig(base)).not.toThrow();
   });
 
-  it("accepts a scrypt hash from the hash-password script", () => {
+  it("points a leftover AUTH_MODE=basic at its replacement", () => {
+    expect(() => loadConfig({ ...base, AUTH_MODE: "basic" })).toThrow(/AUTH_MODE.*"basic" was replaced by "password"/);
+  });
+
+  it("refuses to start without an auth mode", () => {
+    expect(() => loadConfig({ ...base, AUTH_MODE: undefined })).toThrow(/AUTH_MODE/);
+  });
+
+  it("requires the Access settings when Access is on", () => {
+    for (const AUTH_MODE of ["access", "both"]) {
+      resetConfigForTests();
+      expect(() => loadConfig({ ...base, AUTH_MODE })).toThrow(/ACCESS_TEAM_DOMAIN and ACCESS_AUD/);
+    }
+    resetConfigForTests();
     expect(() =>
-      loadConfig({ ...base, BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234" }),
+      loadConfig({ ...base, AUTH_MODE: "both", ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud" }),
     ).not.toThrow();
   });
 
-  it("refuses the username reserved for signing out", () => {
-    expect(() =>
-      loadConfig({
-        ...base,
-        BASIC_AUTH_USERNAME: "signed-out",
-        BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234",
-      }),
-    ).toThrow(/BASIC_AUTH_USERNAME.*reserved/);
+  it("refuses a setup token too short to resist guessing", () => {
+    expect(() => loadConfig({ ...base, SETUP_TOKEN: "short" })).toThrow(/SETUP_TOKEN/);
   });
+});
 
+describe("general validation", () => {
   it("treats a blank optional value as unset", () => {
-    expect(() =>
-      loadConfig({
-        ...base,
-        BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234",
-        R2_ENDPOINT: "",
-      }),
-    ).not.toThrow();
+    expect(() => loadConfig({ ...base, R2_ENDPOINT: "", SETUP_TOKEN: "" })).not.toThrow();
   });
 
   it("requires HTTPS application and storage URLs in production", () => {
-    expect(() =>
-      loadConfig({
-        ...base,
-        NODE_ENV: "production",
-        BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234",
-      }),
-    ).toThrow(/APP_BASE_URL.*https/);
+    expect(() => loadConfig({ ...base, NODE_ENV: "production" })).toThrow(/APP_BASE_URL.*https/);
 
     resetConfigForTests();
     expect(() =>
@@ -64,7 +58,6 @@ describe("BASIC_AUTH_PASSWORD_HASH validation", () => {
         NODE_ENV: "production",
         APP_BASE_URL: "https://files.example.com",
         R2_ENDPOINT: "http://storage.internal",
-        BASIC_AUTH_PASSWORD_HASH: "scrypt:00ff:abcd1234",
       }),
     ).toThrow(/R2_ENDPOINT.*https/);
   });

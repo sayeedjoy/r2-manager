@@ -1,26 +1,17 @@
-import { SIGNED_OUT_USERNAME, type AuthMode } from "@r2-manager/shared";
+import type { AuthMode } from "@r2-manager/shared";
+import { api } from "@/lib/api";
 
 /**
- * Browsers keep Basic credentials until they're closed. Authenticating once
- * with the reserved sign-out username replaces them, so the next API call
- * brings back the login prompt. fetch() can't pass credentials this way;
- * XMLHttpRequest can.
- */
-function forgetBasicCredentials(): Promise<void> {
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", "/api/v1/logout", true, SIGNED_OUT_USERNAME, SIGNED_OUT_USERNAME);
-    xhr.onloadend = () => resolve();
-    xhr.send();
-  });
-}
-
-/**
- * Ends the session for whichever auth modes are on (AUTH-01, AUTH-02). Both
- * cases do a full page load, which also drops cached query data.
+ * Ends the app session, then Cloudflare Access's too when it's in front (AUTH-01, AUTH-02). Both cases do a
+ * full page load, which also drops cached query data.
  */
 export async function signOut(authMode: AuthMode): Promise<void> {
-  if (authMode !== "access") await forgetBasicCredentials();
+  if (authMode !== "access") await api.logout().catch(() => {});
   // Cloudflare serves this path on any hostname behind Access and clears the app's Access cookie.
-  window.location.assign(authMode === "basic" ? "/signed-out" : "/cdn-cgi/access/logout");
+  window.location.assign(authMode === "password" ? "/login?signedOut=1" : "/cdn-cgi/access/logout");
+}
+
+/** Only same-app paths are followed after sign-in, so a crafted ?next= can't bounce the user to another site. */
+export function safeNextPath(next: string | null): string {
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
 }

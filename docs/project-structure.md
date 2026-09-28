@@ -14,7 +14,7 @@ This layout targets hosting on **Dokploy (Docker)** or **Vercel**, with **Postgr
 | Worker `email()` handler | A small Cloudflare relay Worker saves the raw message to R2 and sends a signed webhook to the app |
 | Upload parts go through the Worker | Browser uploads parts directly to R2 with short-lived presigned part URLs. The server creates, signs, completes and aborts the upload (Vercel's request body limit is about 4.5 MB) |
 | Long folder operations in one request | Folder operations run in cursor-based batches: each call processes N keys and returns a cursor. This gives progress and cancellation (FILE-05) and stays within function time limits |
-| Cloudflare Access | Supported when the domain is proxied through Cloudflare. Basic Authentication works on every platform |
+| Cloudflare Access | Supported when the domain is proxied through Cloudflare. The app's own email + password sign-in works on every platform |
 
 Decisions:
 
@@ -67,7 +67,7 @@ r2-manager/
 │       ├── middleware/
 │       │   ├── correlation-id.ts
 │       │   ├── access-jwt.ts         # AUTH-01
-│       │   ├── basic-auth.ts         # AUTH-02
+│       │   ├── same-origin.ts        # CSRF guard for cookie-authenticated mutations
 │       │   ├── auth-gate.ts          # AUTH-03: combine modes, deny if unconfigured
 │       │   ├── rate-limit.ts         # Postgres-backed
 │       │   └── security-headers.ts

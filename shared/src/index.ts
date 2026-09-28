@@ -10,3 +10,4 @@ export * from "./schemas/share";
 export * from "./schemas/metadata";
 export * from "./schemas/settings";
 export * from "./schemas/audit";
+export * from "./schemas/smtp";
