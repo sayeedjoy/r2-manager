@@ -42,7 +42,7 @@ pnpm --filter frontend format                 # prettier (no semicolons, double 
 ### Request flow (server, Hono)
 
 `server/src/app.ts` `createApp({ config, db?, storage? })` builds one runtime-agnostic Hono app. You can inject `db` and `storage` for tests. Two thin entry points wrap it:
-- `entry/node.ts` is the Dokploy entry. It also serves `frontend/dist` with an SPA fallback.
+- `entry/node.ts` is the Dokploy entry. It also serves `frontend/dist` with an SPA fallback and a DB-free `/healthz`. The Docker image does not run the `tsc` output (extensionless ESM imports, raw-TS `shared`). Instead `pnpm --filter server bundle` (`server/bundle.mjs`, esbuild) emits self-contained `dist/bundle/{server,migrate,create-admin}.mjs`, and the runtime stage ships only those, `frontend/dist` and the migrations. The container runs migrations on start unless `SKIP_MIGRATIONS=1`. Deploy guide: `docs/deploy-dokploy.md`.
 - `entry/vercel.ts` is re-exported by `api/[[...route]].ts`. `vercel.json` rewrites `/api/*` and `/s/*` to this function.
 
 The app has three separately authenticated route trees:

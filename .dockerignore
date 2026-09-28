@@ -12,3 +12,11 @@ logs
 .wrangler
 .vscode
 .idea
+.claude
+.agents
+docs
+docker
+api
+**/test
+**/*.test.ts
+**/*.test.tsx

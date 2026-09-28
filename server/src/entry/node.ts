@@ -19,6 +19,8 @@ const apiApp = createApp({ config });
 
 // Dokploy: one process serves the built frontend and the API (project-structure.md).
 const app = new Hono<HonoEnv>();
+// Container liveness probe (Docker HEALTHCHECK / Dokploy). Deliberately skips the DB and auth.
+app.get("/healthz", (c) => c.text("ok"));
 app.use("*", securityHeaders(config.env.NODE_ENV === "production"));
 app.route("/", apiApp);
 app.use("/*", serveStatic({ root: "../frontend/dist" }));

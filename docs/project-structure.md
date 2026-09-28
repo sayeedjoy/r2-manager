@@ -29,7 +29,7 @@ r2-manager/
 ├── package.json                  # root scripts: dev, build, db:migrate, typecheck
 ├── pnpm-workspace.yaml           # frontend, server, shared, email-relay
 ├── .env.example                  # DATABASE_URL, R2_*, AUTH_*, MAIL_WEBHOOK_SECRET, CRON_SECRET
-├── Dockerfile                    # Dokploy: builds frontend + server into one image
+├── Dockerfile                    # Dokploy: Vite build + esbuild server bundle, slim runtime (no node_modules)
 ├── vercel.json                   # Vercel: static frontend, rewrites /api/* and /s/* to the function
 ├── api/
 │   └── [[...route]].ts           # Vercel entry, re-exports server/src/entry/vercel.ts
