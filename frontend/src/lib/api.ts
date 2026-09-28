@@ -239,6 +239,11 @@ export const api = {
   getSettings: () => request<AppSettings>("/api/v1/admin/settings"),
   updateSettings: (body: Partial<AppSettings>) =>
     request<AppSettings>("/api/v1/admin/settings", { method: "PUT", body: json(body) }),
-  getAudit: () => request<{ events: AuditEvent[] }>("/api/v1/admin/audit"),
+  getAudit: (params: { limit: number; offset: number; outcome?: AuditEvent["outcome"]; q?: string }) => {
+    const qs = new URLSearchParams({ limit: String(params.limit), offset: String(params.offset) });
+    if (params.outcome) qs.set("outcome", params.outcome);
+    if (params.q) qs.set("q", params.q);
+    return request<{ events: AuditEvent[]; total: number; limit: number; offset: number }>(`/api/v1/admin/audit?${qs.toString()}`);
+  },
   getHealth: () => request<{ checks: Record<string, string>; buckets: string[] }>("/api/v1/admin/health"),
 };
