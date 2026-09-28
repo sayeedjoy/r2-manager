@@ -110,7 +110,9 @@ export function ShareDialog({ bucket, entry, onClose }: ShareDialogProps) {
         <form onSubmit={handleCreate} className="contents">
           <DialogHeader>
             <DialogTitle>Share link</DialogTitle>
-            <DialogDescription className="truncate">{baseName(entry.key)}</DialogDescription>
+            <DialogDescription className="line-clamp-2 wrap-anywhere" title={baseName(entry.key)}>
+              {baseName(entry.key)}
+            </DialogDescription>
           </DialogHeader>
 
           {url ? (

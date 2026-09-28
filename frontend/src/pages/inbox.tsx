@@ -328,7 +328,9 @@ function CopyAttachmentDialog({ attachment, onClose }: { attachment: MailAttachm
         <form onSubmit={handleCopy} className="contents">
           <DialogHeader>
             <DialogTitle>Copy to a folder</DialogTitle>
-            <DialogDescription className="truncate">{attachment.displayFilename}</DialogDescription>
+            <DialogDescription className="line-clamp-2 wrap-anywhere" title={attachment.displayFilename}>
+              {attachment.displayFilename}
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>

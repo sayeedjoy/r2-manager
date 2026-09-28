@@ -536,7 +536,9 @@ export function BrowserPage() {
           <form onSubmit={handleRenameConfirm} className="contents">
             <DialogHeader>
               <DialogTitle>Rename</DialogTitle>
-              <DialogDescription className="truncate">{renameTarget && baseName(renameTarget.key)}</DialogDescription>
+              <DialogDescription className="line-clamp-2 wrap-anywhere" title={renameTarget ? baseName(renameTarget.key) : undefined}>
+                {renameTarget && baseName(renameTarget.key)}
+              </DialogDescription>
             </DialogHeader>
             <FieldGroup>
               <Field>

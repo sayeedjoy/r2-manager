@@ -98,7 +98,9 @@ export function MetadataDialog({ bucket, entry, onClose, onSaved }: MetadataDial
         <form onSubmit={handleSave} className="contents">
           <DialogHeader>
             <DialogTitle>Metadata</DialogTitle>
-            <DialogDescription className="truncate">{baseName(entry.key)}</DialogDescription>
+            <DialogDescription className="line-clamp-2 wrap-anywhere" title={baseName(entry.key)}>
+              {baseName(entry.key)}
+            </DialogDescription>
           </DialogHeader>
 
           {loading && (
