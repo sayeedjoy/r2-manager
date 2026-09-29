@@ -27,6 +27,7 @@ import {
   applyUntrustedContentHeaders,
   contentDisposition,
 } from "../../services/content-disposition";
+import { RangeNotSatisfiableError } from "../../storage/storage";
 
 const app = new Hono<HonoEnv>();
 
@@ -67,7 +68,21 @@ app.get("/content", async (c) => {
       };
   }
 
-  const result = await storage.get(bucket, key, { range });
+  let result;
+  try {
+    result = await storage.get(bucket, key, { range });
+  } catch (error) {
+    if (error instanceof RangeNotSatisfiableError) {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          "accept-ranges": "bytes",
+          "content-range": `bytes */${error.total}`,
+        },
+      });
+    }
+    throw error;
+  }
   if (!result) return c.json({ error: "Not found" }, 404);
 
   const headers = new Headers();

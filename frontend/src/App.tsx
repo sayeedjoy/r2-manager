@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
 import { RequireAuth } from "@/components/auth/require-auth";
+import { HiddenInDemo } from "@/components/demo";
 import { HomePage } from "@/pages/home";
 import { BrowserPage } from "@/pages/browser";
 import { AccountPage } from "@/pages/account";
@@ -21,10 +22,12 @@ export function App() {
     <BrowserRouter>
       <Routes>
         {/* Signed-out screens sit outside RequireAuth and AppShell, so they make no management API calls. */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/setup" element={<SetupPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route element={<HiddenInDemo />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+        </Route>
         <Route
           element={
             <RequireAuth>
@@ -34,12 +37,14 @@ export function App() {
         >
           <Route index element={<HomePage />} />
           <Route path="/b/:bucket/*" element={<BrowserPage />} />
-          <Route path="/account" element={<AccountPage />} />
-          <Route path="/admin/users" element={<AdminUsersPage />} />
-          <Route path="/admin/settings" element={<AdminSettingsPage />} />
-          <Route path="/admin/email" element={<AdminEmailPage />} />
-          <Route path="/admin/audit" element={<AdminAuditPage />} />
-          <Route path="/admin/health" element={<AdminHealthPage />} />
+          <Route element={<HiddenInDemo />}>
+            <Route path="/account" element={<AccountPage />} />
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/settings" element={<AdminSettingsPage />} />
+            <Route path="/admin/email" element={<AdminEmailPage />} />
+            <Route path="/admin/audit" element={<AdminAuditPage />} />
+            <Route path="/admin/health" element={<AdminHealthPage />} />
+          </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

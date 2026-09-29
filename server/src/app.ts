@@ -27,6 +27,8 @@ import internal from "./routes/v1/internal";
 import auth from "./routes/v1/auth";
 import account from "./routes/v1/account";
 import shareGateway from "./share-gateway/routes";
+import { DemoStorage } from "./demo/storage";
+import { demoReadOnly, demoRoutes, demoVisitor, unavailableDatabase } from "./demo/routes";
 
 export interface CreateAppOptions {
   config: AppConfig;
@@ -36,16 +38,20 @@ export interface CreateAppOptions {
 
 export function createApp(opts: CreateAppOptions) {
   const app = new Hono<HonoEnv>();
+  const demo = opts.config.demo;
 
-  const db = opts.db ?? createDb(opts.config.env);
+  const db =
+    opts.db ?? (demo ? unavailableDatabase() : createDb(opts.config.env));
   const storage =
     opts.storage ??
-    new R2S3Storage({
-      accountId: opts.config.env.R2_ACCOUNT_ID,
-      accessKeyId: opts.config.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: opts.config.env.R2_SECRET_ACCESS_KEY,
-      endpoint: opts.config.r2Endpoint,
-    });
+    (demo
+      ? new DemoStorage()
+      : new R2S3Storage({
+          accountId: opts.config.env.R2_ACCOUNT_ID,
+          accessKeyId: opts.config.env.R2_ACCESS_KEY_ID,
+          secretAccessKey: opts.config.env.R2_SECRET_ACCESS_KEY,
+          endpoint: opts.config.r2Endpoint,
+        }));
 
   app.use("*", correlationId());
   app.use("*", async (c, next) => {
@@ -63,33 +69,46 @@ export function createApp(opts: CreateAppOptions) {
     }),
   );
 
-  // Share gateway (SHARE-02, AUTH-05): its own auth chain, no management login.
-  app.route("/s", shareGateway);
+  if (demo) {
+    // DEMO_MODE (server/src/demo/): one anonymous visitor, sample files, no database and no writes. Only the
+    // read-only file routes are mounted; there is no sign-in, share gateway, cron or admin.
+    app.use("/api/*", demoReadOnly());
+    const api = new Hono<HonoEnv>();
+    api.use("*", demoVisitor());
+    api.route("/", demoRoutes);
+    api.route("/buckets", buckets);
+    api.route("/objects", objects);
+    api.route("/metadata", metadata);
+    app.route("/api/v1", api);
+  } else {
+    // Share gateway (SHARE-02, AUTH-05): its own auth chain, no management login.
+    app.route("/s", shareGateway);
 
-  // Internal routes (cron trigger): secret protected, not session auth.
-  app.route("/api/v1/internal", internal);
+    // Internal routes (cron trigger): secret protected, not session auth.
+    app.route("/api/v1/internal", internal);
 
-  // Session cookies authenticate the API, so refuse mutations another site starts (CSRF).
-  app.use("/api/*", sameOriginMutations());
+    // Session cookies authenticate the API, so refuse mutations another site starts (CSRF).
+    app.use("/api/*", sameOriginMutations());
 
-  // Sign-in, first-run setup and password reset: reachable before there's a session.
-  app.route("/api/v1/auth", auth);
+    // Sign-in, first-run setup and password reset: reachable before there's a session.
+    app.route("/api/v1/auth", auth);
 
-  // Everything else under /api/v1 requires management authentication.
-  const api = new Hono<HonoEnv>();
-  api.use("*", accessJwt());
-  api.use("*", authGate());
-  api.route("/me", me);
-  api.route("/account", account);
-  api.route("/buckets", buckets);
-  api.route("/objects", objects);
-  api.route("/folders", folders);
-  api.route("/uploads", uploads);
-  api.route("/metadata", metadata);
-  api.route("/shares", shareRoutes);
-  api.route("/settings", settingsRoutes);
-  api.route("/admin", admin);
-  app.route("/api/v1", api);
+    // Everything else under /api/v1 requires management authentication.
+    const api = new Hono<HonoEnv>();
+    api.use("*", accessJwt());
+    api.use("*", authGate());
+    api.route("/me", me);
+    api.route("/account", account);
+    api.route("/buckets", buckets);
+    api.route("/objects", objects);
+    api.route("/folders", folders);
+    api.route("/uploads", uploads);
+    api.route("/metadata", metadata);
+    api.route("/shares", shareRoutes);
+    api.route("/settings", settingsRoutes);
+    api.route("/admin", admin);
+    app.route("/api/v1", api);
+  }
 
   app.onError((err, c) => {
     const correlationIdValue = c.get("correlationId") ?? "unknown";

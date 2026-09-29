@@ -8,7 +8,9 @@ import type { AuthUser } from "../types";
 /**
  * The single permission check in the app (AUTH-04). Every route calls this
  * through a service rather than deciding authorization itself. Admins bypass
- * prefix grants; editors/viewers must hold a grant covering bucket+prefix.
+ * prefix grants; editors/viewers must hold a grant covering bucket+prefix. The
+ * DEMO_MODE visitor has no grants table to read, so it reaches every configured
+ * bucket; the demo middleware and storage keep it read-only.
  */
 export async function can(
   db: Database,
@@ -17,7 +19,7 @@ export async function can(
   target?: { bucket: string; key?: string },
 ): Promise<boolean> {
   if (!roleHasCapability(user.role, capability)) return false;
-  if (user.role === "admin") return true;
+  if (user.role === "admin" || user.demo) return true;
   if (!target) return true; // capability doesn't need a bucket/prefix scope (e.g. bucket:list)
 
   const userGrants = await db.query.grants.findMany({ where: eq(grants.userId, user.id) });
@@ -41,7 +43,7 @@ export async function requireCapability(
 
 /** Returns the list of bucket/prefix grants visible to the user (admins see every configured bucket, unscoped). */
 export async function grantsFor(db: Database, user: AuthUser, configuredBuckets: string[]) {
-  if (user.role === "admin") {
+  if (user.role === "admin" || user.demo) {
     return configuredBuckets.map((bucket) => ({ bucket, prefix: "" }));
   }
   const userGrants = await db.query.grants.findMany({ where: eq(grants.userId, user.id) });

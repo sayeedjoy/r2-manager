@@ -58,6 +58,8 @@ export interface Me {
   hasPassword: boolean;
   twoFactorEnabled: boolean;
   recoveryCodesRemaining: number;
+  /** DEMO_MODE's shared visitor: there's no account to manage or session to end. */
+  demo?: boolean;
 }
 
 export interface AuditEvent {

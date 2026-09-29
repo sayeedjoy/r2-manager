@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { AppError, AUTH_MODES } from "@r2-manager/shared";
 
@@ -32,6 +33,12 @@ const envSchema = z
     SETUP_TOKEN: z.string().min(16).optional(),
 
     CRON_SECRET: z.string().min(32).optional(),
+
+    // Public demo site: sample files in memory, no database, no sign-in, every write refused.
+    DEMO_MODE: z
+      .enum(["true", "false", "1", "0"])
+      .default("false")
+      .transform((v) => v === "true" || v === "1"),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production") {
@@ -68,6 +75,8 @@ export interface AppConfig {
   env: Env;
   buckets: string[];
   r2Endpoint: string;
+  /** DEMO_MODE: storage is the in-memory sample set and Postgres is never contacted (see server/src/demo/). */
+  demo: boolean;
 }
 
 let cached: AppConfig | undefined;
@@ -85,11 +94,38 @@ function blankToUndefined(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return result;
 }
 
+const DEMO_FLAG = /^(true|1)$/;
+export const DEMO_BUCKET = "demo-bucket";
+
+/**
+ * DEMO_MODE needs no database, bucket credentials or auth setup, but the schema (and the rest of the server's types)
+ * still expects them. Replace them with inert placeholders, overriding anything set: a real database URL, bucket
+ * names or keys left in the environment are then never loaded into a public demo, let alone used.
+ */
+function withDemoOverrides(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (!DEMO_FLAG.test(source.DEMO_MODE ?? "")) return source;
+  return {
+    ...source,
+    DATABASE_URL: "postgres://demo.invalid/demo",
+    R2_ACCOUNT_ID: "demo",
+    R2_ACCESS_KEY_ID: "demo",
+    R2_SECRET_ACCESS_KEY: "demo",
+    R2_BUCKETS: DEMO_BUCKET,
+    R2_ENDPOINT: undefined,
+    AUTH_MODE: "password",
+    ACCESS_TEAM_DOMAIN: undefined,
+    ACCESS_AUD: undefined,
+    SESSION_SECRET: randomBytes(32).toString("hex"),
+    SETUP_TOKEN: undefined,
+    CRON_SECRET: undefined,
+  };
+}
+
 /** Parses and validates process.env. Throws (refuses to start) if auth is unconfigured (AUTH-03). */
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached) return cached;
 
-  const parsed = envSchema.safeParse(blankToUndefined(source));
+  const parsed = envSchema.safeParse(withDemoOverrides(blankToUndefined(source)));
   if (!parsed.success) {
     const details = parsed.error.issues
       .map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`)
@@ -111,6 +147,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     r2Endpoint:
       env.R2_ENDPOINT ??
       `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    demo: env.DEMO_MODE,
   };
   return cached;
 }

@@ -28,6 +28,14 @@ export interface GetOptions {
   range?: { start: number; end?: number };
 }
 
+/** The requested byte range cannot be served for an object of `total` bytes. */
+export class RangeNotSatisfiableError extends Error {
+  constructor(readonly total: number) {
+    super("Requested range is not satisfiable");
+    this.name = "RangeNotSatisfiableError";
+  }
+}
+
 export interface GetResult extends ObjectHead {
   body: ReadableStream<Uint8Array>;
   range?: { start: number; end: number; total: number };

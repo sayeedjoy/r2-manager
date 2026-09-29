@@ -8,6 +8,8 @@ export interface AuthUser {
   identity: string;
   displayName: string;
   role: Role;
+  /** The DEMO_MODE visitor (server/src/demo/): not a users row, and never granted a write. */
+  demo?: boolean;
 }
 
 export interface AccessIdentity {

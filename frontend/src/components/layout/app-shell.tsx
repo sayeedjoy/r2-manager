@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { DemoBanner } from "@/components/demo";
 import { AppSidebar } from "./app-sidebar";
 import { AppHeader } from "./app-header";
 
@@ -14,6 +15,7 @@ export function AppShell() {
     <SidebarProvider defaultOpen={sidebarWasOpen()} className="h-svh">
       <AppSidebar />
       <SidebarInset className="min-w-0 overflow-hidden">
+        <DemoBanner />
         <AppHeader />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <Outlet />
