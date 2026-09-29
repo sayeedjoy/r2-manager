@@ -303,7 +303,6 @@ app.get("/health", async (c) => {
   }
 
   checks.authMode = "ok"; // reaching this handler already proved auth is configured (AUTH-03)
-  checks.mailWebhook = config.env.MAIL_WEBHOOK_SECRET ? "ok" : "error";
   // Password reset and invites need outgoing email; Access-only deployments don't.
   if (usesPasswordLogin(config.env.AUTH_MODE)) checks.smtp = (await isMailConfigured(db)) ? "ok" : "error";
 

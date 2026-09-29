@@ -24,7 +24,7 @@ Browser ──PUT upload parts directly─────────────�
 7. [Add a domain and create the admin account](#7-add-a-domain-and-create-the-admin-account)
 8. [Schedule background jobs](#8-schedule-background-jobs)
 9. [Serverless limits to know about](#9-serverless-limits-to-know-about)
-10. [Optional: Cloudflare Access, email ingestion](#10-optional-cloudflare-access-and-email-ingestion)
+10. [Optional: Cloudflare Access](#10-optional-cloudflare-access)
 11. [Updating, previews, backups and recovery](#11-updating-previews-backups-and-recovery)
 12. [Troubleshooting](#12-troubleshooting)
 
@@ -110,7 +110,7 @@ Generate each secret with `openssl rand -hex 32` (or any 64-character random hex
 | `SETUP_TOKEN` | Strongly recommended. The deployment is public the moment it builds, and the first person to open it can register the admin account unless this is set. |
 | `CRON_SECRET` | Needed for [step 8](#8-schedule-background-jobs). |
 | `ENABLE_EXPERIMENTAL_COREPACK` | `1` makes Vercel use the pnpm version pinned in the root `package.json` (`packageManager`) instead of guessing one from the lockfile. |
-| `AUTH_MODE`, `ACCESS_*`, `SESSION_SECRET`, `MAIL_WEBHOOK_SECRET`, `R2_*` | Same as Dokploy. `SESSION_SECRET` encrypts 2FA secrets and the SMTP password in the database. Set it once and never change it. |
+| `AUTH_MODE`, `ACCESS_*`, `SESSION_SECRET`, `R2_*` | Same as Dokploy. `SESSION_SECRET` encrypts 2FA secrets and the SMTP password in the database. Set it once and never change it. |
 
 `PORT` and `SKIP_MIGRATIONS` do nothing on Vercel. Outgoing email (password reset, invites) is **not** set through env. You configure it in the app under **Admin → Email delivery**.
 
@@ -182,7 +182,7 @@ A successful run returns `{"ok":true,"expiredUploads":0,...}`.
 - **Function region.** Put the function near the database: **Settings → Functions → Function Region**, or add `"regions": ["fra1"]` (for example) to `vercel.json`. The default region (`iad1`, Washington D.C.) adds latency to every request if your database is elsewhere.
 - **Rate limits and job state** live in Postgres, so they hold across function instances. Nothing depends on memory surviving between requests.
 
-## 10. Optional: Cloudflare Access and email ingestion
+## 10. Optional: Cloudflare Access
 
 **Cloudflare Access (AUTH-01).** Access only works on a hostname proxied through Cloudflare. Point `files.example.com` at Vercel with a proxied (orange-cloud) `CNAME` to `cname.vercel-dns.com`, and set Cloudflare SSL/TLS mode to **Full (strict)**.
 
@@ -192,12 +192,6 @@ A successful run returns `{"ok":true,"expiredUploads":0,...}`.
 4. Add a **Bypass** policy for the path `/s/*`, or share links will demand an Access login from visitors (SHARE-02/AUTH-05). Alternatively, serve shares from a second hostname that Access doesn't cover.
 
 The app verifies the Access JWT itself, so the `*.vercel.app` URL is not a way around Access. Keep `TRUST_PROXY_HOPS=1`. Behind the orange cloud, the address Vercel reports is a Cloudflare edge address, not the visitor's, so per-IP rate limits on login and shares get coarser. Per-account limits are unaffected.
-
-**Email ingestion (MAIL-01, optional).** Deploy [email-relay/](../email-relay/) to Cloudflare separately:
-
-1. In [email-relay/wrangler.jsonc](../email-relay/wrangler.jsonc), set the bucket name and `APP_WEBHOOK_URL` to `https://files.example.com/api/v1/internal/mail-webhook`.
-2. Add `MAIL_WEBHOOK_SECRET` (32+ characters) to the Vercel project and redeploy. Then give the Worker the same value with `pnpm --filter email-relay exec wrangler secret put MAIL_WEBHOOK_SECRET`.
-3. Deploy the Worker with `pnpm --filter email-relay exec wrangler deploy`, then route an address to it under Cloudflare **Email Routing**.
 
 ## 11. Updating, previews, backups and recovery
 
@@ -239,6 +233,6 @@ Function errors show up under the project's **Logs** tab (or Deployments → a d
 | `too many connections` / `remaining connection slots are reserved` | `DATABASE_URL` is a direct connection. Switch to the pooled one. |
 | Uploads fail in the browser with a CORS error | The R2 bucket's CORS policy is missing, or doesn't list the exact origin you're on (custom domain vs `*.vercel.app`) or doesn't expose `ETag` ([step 2](#2-configure-cors-on-the-r2-bucket)). |
 | Large downloads or `stream` shares time out or cut off | They pass through the function. Use `redirect` delivery for large shares ([step 9](#9-serverless-limits-to-know-about)). |
-| Share links ask for a Cloudflare Access login | Add the `/s/*` bypass policy ([step 10](#10-optional-cloudflare-access-and-email-ingestion)). |
+| Share links ask for a Cloudflare Access login | Add the `/s/*` bypass policy ([step 10](#10-optional-cloudflare-access)). |
 | 2FA codes or the saved SMTP password stopped working | `SESSION_SECRET` changed. Restore the old value. |
 | Cron requests return 401 | The scheduler's `X-Cron-Secret` doesn't match `CRON_SECRET`, or `CRON_SECRET` isn't set on Vercel. |

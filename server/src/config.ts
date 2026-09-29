@@ -31,7 +31,6 @@ const envSchema = z
     // Optional: when set, first-run admin registration (/setup) also asks for this value.
     SETUP_TOKEN: z.string().min(16).optional(),
 
-    MAIL_WEBHOOK_SECRET: z.string().min(32).optional(),
     CRON_SECRET: z.string().min(32).optional(),
   })
   .superRefine((env, ctx) => {

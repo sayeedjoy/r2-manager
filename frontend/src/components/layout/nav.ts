@@ -1,4 +1,4 @@
-import { HeartPulse, Inbox, Mail, ScrollText, Settings, Users, type LucideIcon } from "lucide-react";
+import { HeartPulse, Mail, ScrollText, Settings, Users, type LucideIcon } from "lucide-react";
 import type { Capability } from "@r2-manager/shared";
 
 export interface NavItem {
@@ -18,11 +18,6 @@ export interface NavSection {
 
 /** Everything in the sidebar besides the bucket list, which comes from the API. */
 export const NAV_SECTIONS: NavSection[] = [
-  {
-    label: "Mail",
-    capability: "mail:read",
-    items: [{ to: "/mail", label: "Inbox", icon: Inbox }],
-  },
   {
     label: "Admin",
     capability: "admin:manage",

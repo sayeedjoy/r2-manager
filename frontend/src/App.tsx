@@ -3,7 +3,6 @@ import { AppShell } from "@/components/layout/app-shell";
 import { RequireAuth } from "@/components/auth/require-auth";
 import { HomePage } from "@/pages/home";
 import { BrowserPage } from "@/pages/browser";
-import { InboxPage } from "@/pages/inbox";
 import { AccountPage } from "@/pages/account";
 import { AdminUsersPage } from "@/pages/admin/users";
 import { AdminSettingsPage } from "@/pages/admin/settings";
@@ -35,7 +34,6 @@ export function App() {
         >
           <Route index element={<HomePage />} />
           <Route path="/b/:bucket/*" element={<BrowserPage />} />
-          <Route path="/mail" element={<InboxPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/settings" element={<AdminSettingsPage />} />

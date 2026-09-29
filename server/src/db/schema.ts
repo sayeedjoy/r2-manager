@@ -6,7 +6,6 @@ import {
   boolean,
   jsonb,
   uuid,
-  uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -122,30 +121,6 @@ export const uploadSessions = pgTable("upload_sessions", {
   status: text("status", { enum: ["pending", "completed", "aborted", "expired"] }).notNull().default("pending"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const mailMessages = pgTable("mail_messages", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  externalMessageId: text("external_message_id"),
-  sender: text("sender").notNull(),
-  recipient: text("recipient").notNull(),
-  subject: text("subject"),
-  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
-  rawObjectKey: text("raw_object_key"),
-  status: text("status", { enum: ["processed", "rejected", "failed"] }).notNull(),
-  reason: text("reason"),
-}, (t) => ({
-  byExternalId: uniqueIndex("mail_messages_external_id_idx").on(t.externalMessageId),
-}));
-
-export const mailAttachments = pgTable("mail_attachments", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  messageId: uuid("message_id").notNull().references(() => mailMessages.id, { onDelete: "cascade" }),
-  objectKey: text("object_key").notNull(),
-  displayFilename: text("display_filename").notNull(),
-  mimeType: text("mime_type"),
-  size: integer("size"),
-  status: text("status", { enum: ["stored", "rejected"] }).notNull(),
 });
 
 export const auditEvents = pgTable(

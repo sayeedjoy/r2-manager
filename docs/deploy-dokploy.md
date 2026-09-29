@@ -21,7 +21,7 @@ Browser ──PUT upload parts directly─────────────�
 6. [Add a domain](#6-add-a-domain)
 7. [Deploy and create the admin account](#7-deploy-and-create-the-admin-account)
 8. [Schedule background jobs](#8-schedule-background-jobs)
-9. [Optional: Cloudflare Access, email ingestion](#9-optional-cloudflare-access-and-email-ingestion)
+9. [Optional: Cloudflare Access](#9-optional-cloudflare-access)
 10. [Updating, backups and recovery](#10-updating-backups-and-recovery)
 11. [Troubleshooting](#11-troubleshooting)
 12. [About the image](#12-about-the-image)
@@ -111,11 +111,10 @@ Generate each secret with `openssl rand -hex 32` (or any 64-character random hex
 | `R2_BUCKETS` | yes | Comma-separated bucket names this deployment may manage, e.g. `photos,backups`. |
 | `R2_ENDPOINT` | no | Leave unset for R2. It defaults to `https://<account-id>.r2.cloudflarestorage.com`. Must be `https://` in production. |
 | `AUTH_MODE` | yes | `password` (built-in email + password with optional 2FA), `access` (Cloudflare Access only) or `both` (AUTH-03). The app refuses to start without it. |
-| `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | if `access`/`both` | See [step 9](#9-optional-cloudflare-access-and-email-ingestion). |
+| `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | if `access`/`both` | See [step 9](#9-optional-cloudflare-access). |
 | `SESSION_SECRET` | yes | 32+ characters. Signs cookies and **encrypts 2FA secrets and the SMTP password in the database**. Set it once and never change it: changing it breaks every user's 2FA and the saved SMTP password. |
 | `SETUP_TOKEN` | recommended | 16+ characters. The first-run admin registration asks for it, so nobody who finds a fresh deployment first can claim the admin account. |
 | `CRON_SECRET` | recommended | 32+ characters. Protects `/api/v1/internal/cron` ([step 8](#8-schedule-background-jobs)). |
-| `MAIL_WEBHOOK_SECRET` | optional | 32+ characters. Only for email ingestion. |
 | `TRUST_PROXY_HOPS` | yes | How many proxies append to `X-Forwarded-For`. It drives per-IP rate limiting on login and shares. **`1`** when browsers connect straight to Dokploy's Traefik (Cloudflare DNS-only / grey cloud). **`2`** when the domain is proxied through Cloudflare (orange cloud). |
 | `SKIP_MIGRATIONS` | optional | Set to `1` to stop the container from running migrations on start ([step 10](#10-updating-backups-and-recovery)). |
 | `PORT` | no | Defaults to `8787`. If you change it, change the domain's container port too. |
@@ -170,7 +169,7 @@ The command runs inside the app container, where `CRON_SECRET` is already in the
 curl -fsS -X POST -H "X-Cron-Secret: <CRON_SECRET>" https://files.example.com/api/v1/internal/cron
 ```
 
-## 9. Optional: Cloudflare Access and email ingestion
+## 9. Optional: Cloudflare Access
 
 **Cloudflare Access (AUTH-01).** This needs the domain proxied through Cloudflare (orange cloud, so `TRUST_PROXY_HOPS=2`).
 
@@ -178,8 +177,6 @@ curl -fsS -X POST -H "X-Cron-Secret: <CRON_SECRET>" https://files.example.com/ap
 2. Copy its **Application Audience (AUD) tag** into `ACCESS_AUD`, and set `ACCESS_TEAM_DOMAIN` to `https://<team>.cloudflareaccess.com`.
 3. Set `AUTH_MODE=access` or `both`.
 4. Add a **Bypass** policy for the path `/s/*`, or share links will demand an Access login from visitors (SHARE-02/AUTH-05). Alternatively, serve shares from a second hostname that Access doesn't cover.
-
-**Email ingestion (MAIL-01, optional).** Deploy [email-relay/](../email-relay/) to Cloudflare separately with `wrangler deploy`. Point its `APP_WEBHOOK_URL` at `https://files.example.com/api/v1/internal/mail-webhook` and give it the same `MAIL_WEBHOOK_SECRET` as the app.
 
 ## 10. Updating, backups and recovery
 
@@ -213,7 +210,7 @@ It prompts for a new password (or reads `ADMIN_PASSWORD` from the environment), 
 | `Bad Gateway` / `404 page not found` from Traefik | The domain's container port isn't `8787`, or the container is still starting. Check the Logs tab. |
 | Uploads fail in the browser with a CORS error | The R2 bucket's CORS policy is missing, or doesn't list your exact origin or expose `ETag` ([step 2](#2-configure-cors-on-the-r2-bucket)). |
 | Everyone shares one login rate limit, or it trips too easily | `TRUST_PROXY_HOPS` doesn't match your proxy chain. Use `2` behind Cloudflare's orange cloud and `1` otherwise. |
-| Share links ask for a Cloudflare Access login | Add the `/s/*` bypass policy ([step 9](#9-optional-cloudflare-access-and-email-ingestion)). |
+| Share links ask for a Cloudflare Access login | Add the `/s/*` bypass policy ([step 9](#9-optional-cloudflare-access)). |
 | 2FA codes or the saved SMTP password stopped working after a redeploy | `SESSION_SECRET` changed. Restore the old value. |
 | Build is killed (`exit code 137`) during `vite build` or `tsc` | The server ran out of memory. Add swap, or see below. |
 
@@ -232,7 +229,7 @@ Then in Dokploy choose **Provider → Docker**, enter the image name and registr
 
 The [Dockerfile](../Dockerfile) is a two-stage build.
 
-1. **build** (`node:24-alpine`): installs only the `frontend` and `server` workspaces. `email-relay`'s Wrangler/workerd toolchain is skipped. It then builds the SPA with Vite and bundles the server with esbuild ([server/bundle.mjs](../server/bundle.mjs)). The bundle inlines `@r2-manager/shared` and every npm dependency into three self-contained files: `server.mjs`, `migrate.mjs` and `create-admin.mjs`.
+1. **build** (`node:24-alpine`): installs only the `frontend` and `server` workspaces. It then builds the SPA with Vite and bundles the server with esbuild ([server/bundle.mjs](../server/bundle.mjs)). The bundle inlines `@r2-manager/shared` and every npm dependency into three self-contained files: `server.mjs`, `migrate.mjs` and `create-admin.mjs`.
 2. **runtime** (`node:24-alpine`): copies only those bundles, `frontend/dist` and the SQL migrations. That's roughly 10 MB on top of the Node base image: no `node_modules`, no pnpm, no source.
 
 Other properties:

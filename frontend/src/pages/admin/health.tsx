@@ -58,12 +58,6 @@ const CHECKS: Record<string, CheckInfo> = {
     ok: "SMTP is set up, so password reset links and invites can be sent.",
     error: "SMTP isn't set up, so password reset and invite emails can't be sent. Configure it under Email delivery.",
   },
-  mailWebhook: {
-    label: "Mail webhook",
-    icon: Mail,
-    ok: "MAIL_WEBHOOK_SECRET is set, so signed mail from the relay is accepted.",
-    error: "MAIL_WEBHOOK_SECRET isn't set, so incoming mail is rejected.",
-  },
 };
 
 /** ADMIN-03: deployment health for R2, Postgres, and auth configuration, without exposing secrets. */

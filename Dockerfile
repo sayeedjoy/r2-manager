@@ -11,12 +11,10 @@ RUN corepack enable
 WORKDIR /app
 
 # Manifests first so the dependency layer is cached until one of them changes.
-# email-relay's manifest is only there to satisfy the lockfile; its deps (wrangler/workerd) are skipped.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY frontend/package.json frontend/package.json
-COPY email-relay/package.json email-relay/package.json
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter frontend... --filter @r2-manager/server...
 

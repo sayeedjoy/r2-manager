@@ -76,4 +76,3 @@ Locked out of the only admin account with no email set up? Reset it from a shell
 
 - **CORS.** Browsers upload multipart parts straight to the storage endpoint. SeaweedFS allows any origin and exposes the `ETag` header by default, so this works locally without setup. A real R2 bucket needs a CORS rule that allows `PUT` from `APP_BASE_URL` and exposes `ETag`, or uploads fail at the first part.
 - **Credentials.** SeaweedFS reads its S3 access key from [docker/seaweedfs/s3.json](../docker/seaweedfs/s3.json). They're dev-only values; change both that file and `.env` if you want different ones.
-- **Email ingestion.** The `email-relay` Worker needs Cloudflare Email Routing, so it has no local equivalent. You can still test ingestion by putting a raw `.eml` in the bucket with any S3 client and sending a signed POST to `/api/v1/internal/mail-webhook` yourself (see `server/src/mail/ingest.ts`).

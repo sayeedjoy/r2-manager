@@ -39,7 +39,6 @@
 | **Edit** | In-browser editor for text, Markdown, CSV and JSON, with ETag conflict detection so two people can't silently overwrite each other |
 | **Bulk actions** | Move, copy, delete and download-as-zip for many files or entire folders, plus a metadata editor |
 | **Share links** | Public links with optional password, expiry and download limit, and a revoke button. Stream through the app or hand out short-lived presigned URLs |
-| **Email inbox** | Optional: mail sent to an address you choose drops its attachments into a bucket, with size caps and de-duplication |
 | **Sign-in** | Email + password with optional TOTP 2FA and recovery codes, password reset by email, session management. Or put it behind **Cloudflare Access**, or use both |
 | **Roles** | `admin`, `editor` and `viewer`, plus per-user grants scoped to a bucket or a folder prefix |
 | **Audit trail** | Every change is logged. The admin area also covers users, grants, SMTP settings and health |
@@ -295,7 +294,6 @@ Every setting is an environment variable. The server validates them on start and
 | `SESSION_SECRET` | Yes | 32+ characters. Signs cookies and **encrypts 2FA secrets and the SMTP password**. Set it once and never change it. |
 | `SETUP_TOKEN` | recommended | 16+ characters. Required to register the first admin. |
 | `CRON_SECRET` | recommended | 32+ characters. Protects the cleanup endpoint. |
-| `MAIL_WEBHOOK_SECRET` | | 32+ characters. Only needed for [email ingestion](#optional-email-ingestion). |
 | `TRUST_PROXY_HOPS` | | Proxies in front of the app, used for per-IP rate limits. `1` behind one proxy (default), `2` behind Cloudflare orange cloud + your proxy. |
 | `PORT` | | Listen port. Defaults to `8787`. |
 | `SKIP_MIGRATIONS` | | `1` stops the container from running migrations on start. |
@@ -371,25 +369,6 @@ To put the whole app behind Cloudflare Zero Trust:
 
 The app verifies the Access JWT itself. Bypassing Cloudflare doesn't bypass the check.
 
-## Optional: Email ingestion
-
-Send or forward mail to an address like `inbox@example.com`, and its attachments land in your bucket and show up in the app's **Inbox**.
-
-This part runs on Cloudflare as a small Email Routing Worker ([email-relay/](email-relay/)). It stores the raw message in R2 and notifies the app through a signed webhook.
-
-1. In [email-relay/wrangler.jsonc](email-relay/wrangler.jsonc), set your bucket name and `APP_WEBHOOK_URL=https://files.example.com/api/v1/internal/mail-webhook`.
-2. Set `MAIL_WEBHOOK_SECRET` (32+ characters) in the app's `.env` and restart it. Give the Worker the same value:
-
-   ```bash
-   pnpm install
-   pnpm --filter email-relay exec wrangler secret put MAIL_WEBHOOK_SECRET
-   pnpm --filter email-relay exec wrangler deploy
-   ```
-
-3. In Cloudflare **Email Routing**, route an address to the `r2-manager-email-relay` Worker.
-
-By default any sender is accepted, messages are capped at 25 MB and attachments at 20 MB, and a repeated Message-ID is ignored. The defaults live in [server/src/mail/rules.ts](server/src/mail/rules.ts).
-
 ---
 
 ## Local development
@@ -420,7 +399,6 @@ Open <http://localhost:5173> and register the admin account. See [docs/local-dev
 
 - **Frontend:** React 19, Vite, TanStack Query, React Router, Tailwind CSS v4, shadcn/ui (Base UI)
 - **Server:** Hono on Node, Drizzle ORM + PostgreSQL, `aws4fetch` for the R2 S3 API, nodemailer, zod
-- **Email relay:** Cloudflare Worker + Email Routing, `postal-mime`
 
 ### Project layout
 
@@ -430,7 +408,6 @@ r2-manager/
 ├── server/        Hono API, share gateway, jobs, Drizzle schema + migrations
 │   └── src/entry/ node.ts (Docker/Dokploy) and vercel.ts entry points
 ├── shared/        zod schemas, key validation, roles: used by client and server
-├── email-relay/   Cloudflare Email Routing Worker
 ├── api/           Vercel function shim
 ├── docs/          Deployment and development guides
 ├── Dockerfile     Two-stage image: esbuild bundle + static SPA, no node_modules at runtime

@@ -60,27 +60,6 @@ export interface Me {
   recoveryCodesRemaining: number;
 }
 
-/** Mirrors server/src/db/schema.ts mail_messages as the mail routes return it. */
-export interface MailMessage {
-  id: string;
-  externalMessageId: string | null;
-  sender: string;
-  recipient: string;
-  subject: string | null;
-  receivedAt: string;
-  status: "processed" | "rejected" | "failed";
-  reason: string | null;
-}
-
-export interface MailAttachment {
-  id: string;
-  messageId: string;
-  displayFilename: string;
-  mimeType: string | null;
-  size: number | null;
-  status: "stored" | "rejected";
-}
-
 export interface AuditEvent {
   id: string;
   actorId: string | null;
@@ -268,15 +247,6 @@ export const api = {
     request<{ shares: Share[] }>(`/api/v1/shares?${new URLSearchParams({ bucket, key }).toString()}`),
 
   revokeShare: (id: string) => request(`/api/v1/shares/${id}/revoke`, { method: "POST" }),
-
-  listMailMessages: () => request<{ messages: MailMessage[] }>("/api/v1/mail/messages"),
-  getMailMessage: (id: string) => request<{ message: MailMessage; attachments: MailAttachment[] }>(`/api/v1/mail/messages/${id}`),
-  attachmentContentUrl: (id: string) => `/api/v1/mail/attachments/${id}/content`,
-  copyAttachmentToFolder: (attachmentId: string, destBucket: string, destKey: string) =>
-    request<{ bucket: string; key: string; etag: string }>(`/api/v1/mail/attachments/${attachmentId}/copy-to-folder`, {
-      method: "POST",
-      body: json({ destBucket, destKey }),
-    }),
 
   listUsers: () => request<{ users: UserRecord[] }>("/api/v1/admin/users"),
   upsertUser: (body: UpsertUserBody) => request<{ id: string }>("/api/v1/admin/users", { method: "POST", body: json(body) }),

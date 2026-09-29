@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A self-hosted file manager for Cloudflare R2 buckets. It covers browsing, multipart uploads, previews, an in-browser editor, protected share links and email-attachment ingestion. Requirements live in `docs/Cloudflare R2 File Manager SRS.md`. Code comments cite SRS requirement IDs (`AUTH-03`, `FILE-05`, `SHARE-04`, `MAIL-01`, `NFR-09`, …), and commit messages do too. Keep citing them when you implement or change a requirement.
+A self-hosted file manager for Cloudflare R2 buckets. It covers browsing, multipart uploads, previews, an in-browser editor and protected share links. Requirements live in `docs/Cloudflare R2 File Manager SRS.md`. Code comments cite SRS requirement IDs (`AUTH-03`, `FILE-05`, `SHARE-04`, `NFR-09`, …), and commit messages do too. Keep citing them when you implement or change a requirement.
 
-The main app is deployed to **Dokploy (Docker) or Vercel, with Postgres**. It does not run on Cloudflare Workers or D1, even though the SRS assumes it does. `docs/project-structure.md` describes that deviation. Only `email-relay/` runs on Cloudflare.
+The main app is deployed to **Dokploy (Docker) or Vercel, with Postgres**. It does not run on Cloudflare Workers or D1, even though the SRS assumes it does. `docs/project-structure.md` describes that deviation.
 
 ## Commands
 
-pnpm workspace (`frontend`, `server` = `@r2-manager/server`, `shared` = `@r2-manager/shared`, `email-relay`). Node >= 20.
+pnpm workspace (`frontend`, `server` = `@r2-manager/server`, `shared` = `@r2-manager/shared`). Node >= 20.
 
 ```bash
 pnpm install
@@ -50,7 +50,7 @@ The app has three separately authenticated route trees:
    - **`/api/v1/auth/*`** (`routes/v1/auth.ts`) sits outside the gate: status, first-run `setup` (open until an admin exists, then closed for good through an `app_settings` flag), `login` + `login/verify` (TOTP or recovery code; a 2FA account first gets an `mfaPending` session), `logout`, `password/forgot` and `password/reset`. `/api/v1/account/*` holds the signed-in user's password, 2FA and sessions.
    - `sameOriginMutations` refuses cross-site mutations on `/api/*`. The session cookie is also `SameSite=Strict`.
 2. **`/s/:token`** is the public share gateway (`share-gateway/`). It has no management auth. It gets strict CSP, `noindex` and `no-store` headers, Postgres-backed rate limiting and a server-rendered password page. Share visitors never load the SPA.
-3. **`/api/v1/internal/*`** covers `/cron`, protected by the `x-cron-secret` header, and `/mail-webhook`, which checks an HMAC in `x-webhook-signature` against `MAIL_WEBHOOK_SECRET`.
+3. **`/api/v1/internal/*`** covers `/cron`, protected by the `x-cron-secret` header.
 
 `config`, `db`, `storage`, `user` and `correlationId` are all available on `c.var` (types in `server/src/types.ts`).
 
@@ -71,10 +71,6 @@ The app has three separately authenticated route trees:
 - Share download limits use a single conditional `UPDATE ... WHERE reserved < max_downloads RETURNING` so concurrent requests can't exceed the limit. Each share has a delivery mode: `stream` goes through the app, and `redirect` sends a short-lived presigned URL.
 - `db/client.ts` and `loadConfig()` are module-level singletons. The DB pool size is 1 when `VERCEL` is set.
 
-### Email ingestion
-
-`email-relay/` is a Cloudflare Email Routing Worker. It writes the raw `.eml` to R2, then POSTs a signed JSON webhook. `server/src/mail/ingest.ts` verifies the webhook, fetches and parses the message with `postal-mime`, and applies `mail/rules.ts` (allowlists, size/type caps, Message-ID dedupe). It stores the attachments and indexes them in `mail_messages`/`mail_attachments`.
-
 ### Shared package
 
 `shared/` is consumed as raw TypeScript source (`main: ./src/index.ts`) and has no build output. It holds the zod request/response schemas, key normalization (`keys.ts` rejects traversal, leading slashes, empty segments and backslashes), roles/capabilities and preview-type detection. Both the client and the server enforce these same rules. Server tests exercise `shared` directly.
@@ -83,5 +79,5 @@ The app has three separately authenticated route trees:
 
 Vite, React 19, TanStack Query and React Router, with Tailwind v4 and shadcn/ui. The shadcn style is `base-nova`, which is built on **`@base-ui/react`, not Radix**. The `@` alias points to `frontend/src`.
 - `src/lib/api.ts` is a hand-written `fetch` wrapper (the `api` object plus `ApiError`), even though the structure doc mentions a Hono RPC client. Add new endpoints there.
-- `src/pages/` holds route pages (browser, inbox, admin/*). Feature UI lives in `src/features/<feature>/`, and `src/components/ui/` is shadcn-generated.
+- `src/pages/` holds route pages (browser, admin/*). Feature UI lives in `src/features/<feature>/`, and `src/components/ui/` is shadcn-generated.
 - Project skills for UI work (`shadcn`, `better-ui`, `emil-design-eng`, `vercel-react-best-practices`) are in `.claude/skills/`.

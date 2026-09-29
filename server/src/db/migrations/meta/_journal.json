@@ -22,6 +22,13 @@
       "when": 1790597100357,
       "tag": "0002_normalize_user_identities",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790702744251,
+      "tag": "0003_drop_mail_ingestion",
+      "breakpoints": true
     }
   ]
 }

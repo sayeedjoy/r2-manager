@@ -9,8 +9,6 @@ export const CAPABILITIES = [
   "object:delete",
   "share:create",
   "share:revoke",
-  "mail:read",
-  "mail:manage",
   "admin:manage",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
@@ -18,7 +16,7 @@ export type Capability = (typeof CAPABILITIES)[number];
 /** Minimum role required for a capability when no explicit grant table is consulted. */
 export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   admin: [...CAPABILITIES],
-  editor: ["bucket:list", "object:read", "object:write", "object:delete", "share:create", "share:revoke", "mail:read", "mail:manage"],
+  editor: ["bucket:list", "object:read", "object:write", "object:delete", "share:create", "share:revoke"],
   viewer: ["bucket:list", "object:read"],
 };
 

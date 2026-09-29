@@ -22,7 +22,6 @@ import uploads from "./routes/v1/uploads";
 import metadata from "./routes/v1/metadata";
 import shareRoutes from "./routes/v1/shares";
 import settingsRoutes from "./routes/v1/settings";
-import mail from "./routes/v1/mail";
 import admin from "./routes/v1/admin";
 import internal from "./routes/v1/internal";
 import auth from "./routes/v1/auth";
@@ -67,7 +66,7 @@ export function createApp(opts: CreateAppOptions) {
   // Share gateway (SHARE-02, AUTH-05): its own auth chain, no management login.
   app.route("/s", shareGateway);
 
-  // Internal routes (cron trigger, mail webhook): secret/HMAC protected, not session auth.
+  // Internal routes (cron trigger): secret protected, not session auth.
   app.route("/api/v1/internal", internal);
 
   // Session cookies authenticate the API, so refuse mutations another site starts (CSRF).
@@ -89,7 +88,6 @@ export function createApp(opts: CreateAppOptions) {
   api.route("/metadata", metadata);
   api.route("/shares", shareRoutes);
   api.route("/settings", settingsRoutes);
-  api.route("/mail", mail);
   api.route("/admin", admin);
   app.route("/api/v1", api);
 
