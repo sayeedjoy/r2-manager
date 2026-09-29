@@ -1,6 +1,7 @@
 import type { ObjectEntry } from "@r2-manager/shared";
 import { baseName } from "@r2-manager/shared";
 import { typeLabel } from "./file-kind";
+import { PAGE_SIZES, type PageSize } from "./listing-filters";
 
 export type SortColumn = "name" | "type" | "size" | "modified";
 export interface SortState {
@@ -16,12 +17,15 @@ export interface ViewOptions {
   sort: SortState;
   /** Which optional list-view columns are shown. Name and selection always are. */
   properties: Record<DisplayProperty, boolean>;
+  /** Rows per page, in both the list and the grid. */
+  pageSize: PageSize;
 }
 
 export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
   density: "compact",
   sort: { column: "name", dir: 1 },
   properties: { type: true, size: true, modified: true },
+  pageSize: 50,
 };
 
 export const DISPLAY_PROPERTIES: { value: DisplayProperty; label: string }[] = [
@@ -103,6 +107,7 @@ export function readViewOptions(): ViewOptions {
         size: raw.properties?.size !== false,
         modified: raw.properties?.modified !== false,
       },
+      pageSize: PAGE_SIZES.find((size) => size === raw.pageSize) ?? DEFAULT_VIEW_OPTIONS.pageSize,
     };
   } catch {
     return DEFAULT_VIEW_OPTIONS;

@@ -6,10 +6,19 @@ import {
   DayPicker,
   getDefaultClassNames,
   type DayButton,
+  type DropdownProps,
   type Locale,
 } from "react-day-picker"
 
 import { Button, buttonVariants } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react"
 
 function Calendar({
@@ -164,6 +173,7 @@ function Calendar({
         DayButton: ({ ...props }) => (
           <CalendarDayButton locale={locale} {...props} />
         ),
+        Dropdown: CalendarDropdown,
         WeekNumber: ({ children, ...props }) => {
           return (
             <td {...props}>
@@ -218,4 +228,53 @@ function CalendarDayButton({
   )
 }
 
-export { Calendar, CalendarDayButton }
+/**
+ * The month and year pickers of `captionLayout="dropdown"`, as a Select instead of the browser's native one.
+ * DayPicker's change handlers only read `event.target.value`, so the pick is handed back in that shape.
+ */
+function CalendarDropdown({
+  options = [],
+  value,
+  onChange,
+  disabled,
+  "aria-label": ariaLabel,
+}: DropdownProps) {
+  const items = options.map((option) => ({
+    value: String(option.value),
+    label: option.label,
+  }))
+
+  return (
+    <Select
+      items={items}
+      value={value === undefined ? null : String(value)}
+      disabled={disabled}
+      onValueChange={(next) => {
+        if (next === null) return
+        onChange?.({
+          target: { value: next },
+        } as unknown as React.ChangeEvent<HTMLSelectElement>)
+      }}
+    >
+      {/* `relative` lifts the trigger above the nav, which spans the caption row absolutely and would take its clicks. */}
+      <SelectTrigger size="sm" aria-label={ariaLabel} className="relative">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent alignItemWithTrigger={false} className="min-w-24">
+        <SelectGroup>
+          {options.map((option) => (
+            <SelectItem
+              key={option.value}
+              value={String(option.value)}
+              disabled={option.disabled}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
+}
+
+export { Calendar, CalendarDayButton, CalendarDropdown }

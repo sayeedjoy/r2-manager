@@ -57,7 +57,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { api } from "@/lib/api";
 import { formatBytes, pluralize } from "@/lib/format";
 import { notifyError, notifyInfo } from "@/lib/notify";
-import { useListing } from "@/hooks/use-listing";
+import { LISTING_LOAD_STEP, useListing } from "@/hooks/use-listing";
 import { useUploadQueue } from "@/features/upload/upload-queue";
 import { DropZone } from "@/features/upload/drop-zone";
 import { UploadDialog } from "@/features/upload/upload-dialog";
@@ -72,6 +72,9 @@ import { FolderCards } from "@/features/files/folder-cards";
 import { fileCategory, TYPE_FILTERS, type TypeFilter } from "@/features/files/file-kind";
 import { nextSort, readViewOptions, sortEntries, writeViewOptions, type ViewOptions } from "@/features/files/view-options";
 import { ViewOptionsPopover } from "@/features/files/view-options-popover";
+import { DateRangeFilter } from "@/features/files/date-range-filter";
+import { ListingPagination } from "@/features/files/listing-pagination";
+import { inDateRange, isDateRangeActive, paginate, PAGE_SIZES, type DateRange } from "@/features/files/listing-filters";
 import { cn } from "@/lib/utils";
 import { ShareDialog } from "@/features/shares/share-dialog";
 import { PreviewSheet } from "@/features/preview/preview-sheet";
@@ -112,7 +115,7 @@ export function BrowserPage() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
 
-  const { data, isLoading, error, refetch } = useListing(bucket, prefix);
+  const { data, isLoading, error, refetch, isLoadingMore, capped, loadMore } = useListing(bucket, prefix);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -126,6 +129,9 @@ export function BrowserPage() {
   const [view, setView] = useState<ViewMode>(readViewPreference);
   const [filter, setFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [dateRange, setDateRange] = useState<DateRange>({});
+  const [page, setPage] = useState(1);
+  const listingTopRef = useRef<HTMLDivElement>(null);
   const [viewOptions, setViewOptions] = useState<ViewOptions>(readViewOptions);
   const [moveCopyMode, setMoveCopyMode] = useState<"move" | "copy" | null>(null);
   const [dialogBusy, setDialogBusy] = useState(false);
@@ -141,6 +147,16 @@ export function BrowserPage() {
     setSelected(new Set());
     setFilter("");
     setTypeFilter("all");
+    setDateRange({});
+    setPage(1);
+  }
+
+  // Narrowing or reordering the list starts again from its first page, where the best matches now are.
+  const pageScope = `${filter}|${typeFilter}|${dateRange.from?.getTime()}|${dateRange.to?.getTime()}|${viewOptions.sort.column}:${viewOptions.sort.dir}|${viewOptions.pageSize}`;
+  const [lastPageScope, setLastPageScope] = useState(pageScope);
+  if (lastPageScope !== pageScope) {
+    setLastPageScope(pageScope);
+    setPage(1);
   }
 
   // "/" jumps to the filter, as in most file and code browsers.
@@ -173,18 +189,31 @@ export function BrowserPage() {
     setSelected(new Set());
   }
 
-  // FILE-02: name and type filtering within the current (already loaded) location, in the order the View menu set.
-  // Everything downstream (table, grid, select-all, copy) works on this one list, so they always agree.
+  // FILE-02: name, type and date filtering within the current (already loaded) location, in the order the View menu
+  // set. Everything downstream (pages, table, grid, gallery, copy) works on this one list, so they always agree.
   const filteredEntries = useMemo(() => {
     if (!data) return [];
     const needle = filter.trim().toLowerCase();
     const matches = data.entries.filter(
       (e) =>
         (!needle || baseName(e.key).toLowerCase().includes(needle)) &&
-        (typeFilter === "all" || fileCategory(e) === typeFilter),
+        (typeFilter === "all" || fileCategory(e) === typeFilter) &&
+        inDateRange(e, dateRange),
     );
     return sortEntries(matches, viewOptions.sort);
-  }, [data, filter, typeFilter, viewOptions.sort]);
+  }, [data, filter, typeFilter, dateRange, viewOptions.sort]);
+
+  // FILE-01: the loaded listing is paged locally, so the page count is exact and "Last" is one click.
+  const paged = useMemo(
+    () => paginate(filteredEntries, page, viewOptions.pageSize),
+    [filteredEntries, page, viewOptions.pageSize],
+  );
+  const pageEntries = paged.items;
+
+  function goToPage(next: number) {
+    setPage(next);
+    listingTopRef.current?.scrollIntoView({ block: "nearest" });
+  }
 
   // PREV-01: the image preview steps through the images shown in this folder, in the same filter and sort order.
   const galleryEntries = useMemo(
@@ -202,12 +231,21 @@ export function BrowserPage() {
     const files = data.entries.filter((e) => e.type === "file");
     const parts = [pluralize(data.entries.length - files.length, "folder"), pluralize(files.length, "file")];
     if (files.length > 0) parts.push(formatBytes(files.reduce((total, e) => total + (e.size ?? 0), 0)));
-    if (data.truncated) parts.push("more not shown");
+    if (isLoadingMore) parts.push("loading more…");
+    else if (data.truncated) parts.push("more not loaded");
     return parts.join(" · ");
-  }, [data]);
+  }, [data, isLoadingMore]);
 
+  /** The header checkbox and Ctrl/⌘+A act on the page in view. Picks on other pages stay selected. */
   function setAllSelected(checked: boolean) {
-    setSelected(checked ? new Set(filteredEntries.map((e) => e.key)) : new Set());
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const e of pageEntries) {
+        if (checked) next.add(e.key);
+        else next.delete(e.key);
+      }
+      return next;
+    });
   }
 
   function toggleSelect(key: string) {
@@ -261,7 +299,7 @@ export function BrowserPage() {
   // follow the platform's own shortcuts and leave copying selected text to the browser.
   const onSelectAllKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== "a" || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
-    if (!isListingShortcutTarget(event.target) || filteredEntries.length === 0) return;
+    if (!isListingShortcutTarget(event.target) || pageEntries.length === 0) return;
     event.preventDefault();
     setAllSelected(true);
   });
@@ -508,9 +546,21 @@ export function BrowserPage() {
           <EmptyMedia variant="icon">
             <SearchX />
           </EmptyMedia>
-          <EmptyTitle>{filter.trim() ? <>Nothing matches “{filter.trim()}”</> : "Nothing of this type here"}</EmptyTitle>
+          <EmptyTitle>
+            {filter.trim() ? (
+              <>Nothing matches “{filter.trim()}”</>
+            ) : typeFilter !== "all" ? (
+              "Nothing of this type here"
+            ) : (
+              "Nothing modified in this range"
+            )}
+          </EmptyTitle>
           <EmptyDescription>
-            {typeFilter === "all" ? "The search only looks at names in this folder." : `Showing ${typeFilterLabel.toLowerCase()} in this folder only.`}
+            {typeFilter !== "all"
+              ? `Showing ${typeFilterLabel.toLowerCase()} in this folder only.`
+              : isDateRangeActive(dateRange)
+                ? "The date filter only looks at files in this folder. Folders have no date."
+                : "The search only looks at names in this folder."}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -519,6 +569,7 @@ export function BrowserPage() {
             onClick={() => {
               setFilter("");
               setTypeFilter("all");
+              setDateRange({});
             }}
           >
             Clear filters
@@ -528,8 +579,9 @@ export function BrowserPage() {
     );
   } else if (view === "list") {
     const folders = filteredEntries.filter((e) => e.type === "folder");
-    // Cards are shortcuts for folders mixed in among files. When the list is all folders, they'd only repeat it.
-    const showFolderCards = folders.length > 0 && folders.length < filteredEntries.length;
+    // Cards are shortcuts for folders mixed in among files. When the list is all folders, they'd only repeat it, and
+    // past the first page they'd push the page's own rows down.
+    const showFolderCards = paged.page === 1 && folders.length > 0 && folders.length < filteredEntries.length;
     listing = (
       <>
         {showFolderCards && (
@@ -547,7 +599,7 @@ export function BrowserPage() {
             </h2>
           )}
           <FileTable
-            entries={filteredEntries}
+            entries={pageEntries}
             selected={selected}
             onToggleSelect={toggleSelect}
             onSelectAll={setAllSelected}
@@ -562,7 +614,7 @@ export function BrowserPage() {
       </>
     );
   } else {
-    listing = <FileGrid bucket={bucket} entries={filteredEntries} selected={selected} onToggleSelect={toggleSelect} onOpen={handleOpen} />;
+    listing = <FileGrid bucket={bucket} entries={pageEntries} selected={selected} onToggleSelect={toggleSelect} onOpen={handleOpen} />;
   }
 
   return (
@@ -644,6 +696,7 @@ export function BrowserPage() {
               </SelectGroup>
             </SelectContent>
           </Select>
+          <DateRangeFilter value={dateRange} onChange={setDateRange} />
           <ToggleGroup
             variant="outline"
             spacing={0}
@@ -660,22 +713,49 @@ export function BrowserPage() {
           </ToggleGroup>
           <ViewOptionsPopover options={viewOptions} onChange={changeViewOptions} listView={view === "list"} />
         </div>
-        <DropZone
-          onFiles={handleFiles}
-          pickerRef={fileInputRef}
-          folderPickerRef={folderInputRef}
-          className="flex min-h-0 flex-1 flex-col overflow-auto"
-        >
-          {listing}
-        </DropZone>
-        <BulkActionsBar
-          count={selectedEntries.length}
-          onDownloadZip={handleBulkDownload}
-          onMove={() => setMoveCopyMode("move")}
-          onCopy={() => setMoveCopyMode("copy")}
-          onDelete={() => deleteEntries(selectedEntries)}
-          onClear={() => setSelected(new Set())}
-        />
+        {/* The bulk bar floats over the rows only, so it never covers the page controls below them. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <DropZone
+            onFiles={handleFiles}
+            pickerRef={fileInputRef}
+            folderPickerRef={folderInputRef}
+            className="flex min-h-0 flex-1 flex-col overflow-auto"
+          >
+            <div ref={listingTopRef} />
+            {listing}
+          </DropZone>
+          <BulkActionsBar
+            count={selectedEntries.length}
+            onDownloadZip={handleBulkDownload}
+            onMove={() => setMoveCopyMode("move")}
+            onCopy={() => setMoveCopyMode("copy")}
+            onDelete={() => deleteEntries(selectedEntries)}
+            onClear={() => setSelected(new Set())}
+          />
+        </div>
+        {capped && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t bg-muted/40 px-3 py-2 text-sm">
+            <p className="mr-auto text-muted-foreground">
+              Only the first {data?.entries.length.toLocaleString()} items are loaded. Search, filters, sorting and pages
+              cover those.
+            </p>
+            <Button variant="outline" size="sm" onClick={loadMore}>
+              Load {LISTING_LOAD_STEP.toLocaleString()} more
+            </Button>
+          </div>
+        )}
+        {filteredEntries.length > PAGE_SIZES[0] && (
+          <ListingPagination
+            page={paged.page}
+            pageCount={paged.pageCount}
+            pageSize={viewOptions.pageSize}
+            start={paged.start}
+            shown={pageEntries.length}
+            total={filteredEntries.length}
+            onPageChange={goToPage}
+            onPageSizeChange={(pageSize) => changeViewOptions({ ...viewOptions, pageSize })}
+          />
+        )}
       </div>
 
       <Dialog
