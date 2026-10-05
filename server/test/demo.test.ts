@@ -184,8 +184,65 @@ describe("DEMO_MODE app", () => {
     }
   });
 
-  it("doesn't mount the database-backed routes", async () => {
-    for (const path of ["/api/v1/admin/users", "/api/v1/account/sessions", "/s/some-token", "/api/v1/internal/cron"]) {
+  it("shows a sample admin area without a database", async () => {
+    const me = await (await get("/api/v1/me")).json();
+    expect(me.role).toBe("admin");
+
+    const { users } = await (await get("/api/v1/admin/users")).json();
+    expect(users.map((u: { id: string }) => u.id)).toContain(me.id);
+
+    expect(await (await get("/api/v1/admin/settings")).json()).toHaveProperty("maxUploadSizeBytes");
+    expect(await (await get("/api/v1/admin/smtp")).json()).toMatchObject({ enabled: true, passwordSet: true });
+    expect(await (await get("/api/v1/admin/health")).json()).toMatchObject({
+      checks: { storage: "ok" },
+      buckets: ["demo-bucket"],
+    });
+
+    const { sessions } = await (await get("/api/v1/account/sessions", { "user-agent": "vitest" })).json();
+    expect(sessions).toMatchObject([{ current: true, userAgent: "vitest" }]);
+
+    expect((await anonymousGet("/api/v1/admin/audit")).status).toBe(401);
+  });
+
+  it("pages and filters the sample audit log", async () => {
+    const first = await (await get("/api/v1/admin/audit?limit=25")).json();
+    expect(first.events).toHaveLength(25);
+    expect(first.total).toBeGreaterThan(25);
+    const times = first.events.map((e: { createdAt: string }) => Date.parse(e.createdAt));
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+
+    const second = await (await get("/api/v1/admin/audit?limit=25&offset=25")).json();
+    expect(second.events[0].id).not.toBe(first.events[0].id);
+
+    const failures = await (await get("/api/v1/admin/audit?outcome=failure&limit=100")).json();
+    expect(failures.total).toBeGreaterThan(0);
+    expect(failures.events.every((e: { outcome: string }) => e.outcome === "failure")).toBe(true);
+
+    const shares = await (await get("/api/v1/admin/audit?q=SHARE.&limit=100")).json();
+    expect(shares.total).toBeGreaterThan(0);
+    expect(shares.events.every((e: { action: string }) => e.action.startsWith("share."))).toBe(true);
+  });
+
+  it("refuses admin and account changes", async () => {
+    for (const [method, path] of [
+      ["PUT", "/api/v1/admin/settings"],
+      ["PUT", "/api/v1/admin/smtp"],
+      ["POST", "/api/v1/admin/users"],
+      ["POST", "/api/v1/account/password"],
+      ["DELETE", "/api/v1/account/sessions/demo"],
+    ] as const) {
+      const res = await app().request(`http://localhost:8787${path}`, {
+        method,
+        headers: { "content-type": "application/json", ...signedIn },
+        body: "{}",
+      });
+      expect(res.status, path).toBe(403);
+      expect((await res.json()).error.message, path).toMatch(/read-only demo/);
+    }
+  });
+
+  it("doesn't mount the share gateway or the cron trigger", async () => {
+    for (const path of ["/s/some-token", "/api/v1/internal/cron"]) {
       expect((await get(path)).status, path).toBe(404);
     }
   });

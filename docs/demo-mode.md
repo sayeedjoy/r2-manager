@@ -4,14 +4,15 @@
 
 What changes:
 
-- **One shared demo account.** Visitors land on the sign-in page, which shows the demo email and password (`demo@example.com` / `r2-manager-demo`) and fills them in. No other account can sign in. Everyone who does is the same "Demo visitor" (an editor, so the upload, rename and share buttons stay visible to show what the app does).
-- **No registration.** First-run setup, password reset, the account page and the admin area are all turned off, so nobody can create or change an account.
+- **One shared demo account.** Visitors land on the sign-in page, which shows the demo email and password (`demo@example.com` / `r2-manager-demo`) and fills them in. No other account can sign in. Everyone who does is the same "Demo visitor" (an admin, so the upload, rename and share buttons and the admin area are all there to look at).
+- **No registration.** First-run setup and password reset are turned off, so nobody can create or change an account.
+- **A sample admin area.** Users, Settings, Email delivery, the Audit log and Health open with made-up data ([server/src/demo/admin.ts](../server/src/demo/admin.ts)): five users, about 60 audit events to page, search and filter, a configured SMTP provider and an all-healthy status. The account page works too and lists the visitor's own browser as the only session. Saving anything on these pages is refused. Health shows what a working deployment reports; the demo has no Postgres or SMTP to check.
 - **No real data.** Storage is a built-in set of sample files held in memory ([server/src/demo/fixtures.ts](../server/src/demo/fixtures.ts)): Markdown, PDF, CSV, JSON Lines, JSON, SVG, PNG, source code and 30 log files for pagination. They appear in one bucket, `demo-bucket`.
 - **No database.** Postgres is never contacted. The Docker image skips migrations, `pnpm db:migrate` does nothing but say so, and `create-admin` refuses to run, even if a `DATABASE_URL` is still set.
 - **Read-only.** The server refuses every non-GET API request except signing in and out with a 403 "read-only demo" message, and the demo storage throws on any write as a second line of defence. The share gateway (`/s/*`) and the cron trigger aren't mounted. Bulk "download as zip" is refused too, since it records an audit event.
 - **Nothing real is loaded.** Demo mode overrides `DATABASE_URL`, the `R2_*` settings, `AUTH_MODE`, the Access settings, `SESSION_SECRET`, `SETUP_TOKEN` and `CRON_SECRET` with placeholders, so a value left over from a real `.env` is never read.
 
-The frontend shows a "Read-only demo" banner, hides the account link, and sends `/setup`, `/forgot-password`, `/reset-password`, `/account` and `/admin/*` to the file browser (or to the sign-in page for a visitor who hasn't signed in).
+The frontend shows a "Read-only demo" banner and sends `/setup`, `/forgot-password` and `/reset-password` to the file browser (or to the sign-in page for a visitor who hasn't signed in).
 
 The demo session is a plain cookie that lasts a day. Because the password is public, the cookie isn't a secret and protects nothing: the sign-in is there to show the screen, not to keep anyone out. That also means it needs no sessions table and keeps working across restarts.
 
@@ -36,7 +37,8 @@ On Dokploy, create the application as in [deploy-dokploy.md](deploy-dokploy.md),
 
 - [server/src/config.ts](../server/src/config.ts): `DEMO_MODE` sets `config.demo` and replaces the real-deployment settings.
 - [server/src/app.ts](../server/src/app.ts): `createApp` mounts the demo chain instead of `accessJwt` → `authGate`, the auth routes, the share gateway and the cron trigger.
-- [server/src/demo/routes.ts](../server/src/demo/routes.ts): the demo account (`DEMO_LOGIN`) and its `auth/status`, `auth/login` and `auth/logout` routes, the cookie check that replaces `authGate`, the read-only middleware, a stand-in database that throws if anything reaches for it, and stubs for `me`, `settings` and `shares`.
+- [server/src/demo/routes.ts](../server/src/demo/routes.ts): the demo account (`DEMO_LOGIN`) and its `auth/status`, `auth/login` and `auth/logout` routes, the cookie check that replaces `authGate`, the read-only middleware, a stand-in database that throws if anything reaches for it, and stubs for `me`, `settings`, `shares` and `account/sessions`.
+- [server/src/demo/admin.ts](../server/src/demo/admin.ts): the sample users, SMTP settings, audit events and health checks behind `/api/v1/admin/*`.
 - [server/src/demo/storage.ts](../server/src/demo/storage.ts): `DemoStorage`, an in-memory `Storage` whose writes throw.
 - [server/src/db/migrate.ts](../server/src/db/migrate.ts) and [server/src/scripts/create-admin.ts](../server/src/scripts/create-admin.ts): both check `DEMO_MODE` before opening a connection.
 - [frontend/src/pages/auth/login.tsx](../frontend/src/pages/auth/login.tsx): shows and fills in `demoLogin` from `/api/v1/auth/status`.

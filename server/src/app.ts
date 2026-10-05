@@ -29,6 +29,7 @@ import account from "./routes/v1/account";
 import shareGateway from "./share-gateway/routes";
 import { DemoStorage } from "./demo/storage";
 import { demoAuthRoutes, demoReadOnly, demoRoutes, demoVisitor, unavailableDatabase } from "./demo/routes";
+import { demoAdminRoutes } from "./demo/admin";
 
 export interface CreateAppOptions {
   config: AppConfig;
@@ -71,12 +72,14 @@ export function createApp(opts: CreateAppOptions) {
 
   if (demo) {
     // DEMO_MODE (server/src/demo/): one shared demo account, sample files, no database and no writes. Only the
-    // demo sign-in and the read-only file routes are mounted; there is no setup, share gateway, cron or admin.
+    // demo sign-in, the read-only file routes and a sample admin area are mounted; there is no setup, share
+    // gateway or cron.
     app.use("/api/*", demoReadOnly());
     app.route("/api/v1/auth", demoAuthRoutes);
     const api = new Hono<HonoEnv>();
     api.use("*", demoVisitor());
     api.route("/", demoRoutes);
+    api.route("/admin", demoAdminRoutes);
     api.route("/buckets", buckets);
     api.route("/objects", objects);
     api.route("/metadata", metadata);

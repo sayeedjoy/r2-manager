@@ -37,14 +37,12 @@ export function App() {
         >
           <Route index element={<HomePage />} />
           <Route path="/b/:bucket/*" element={<BrowserPage />} />
-          <Route element={<HiddenInDemo />}>
-            <Route path="/account" element={<AccountPage />} />
-            <Route path="/admin/users" element={<AdminUsersPage />} />
-            <Route path="/admin/settings" element={<AdminSettingsPage />} />
-            <Route path="/admin/email" element={<AdminEmailPage />} />
-            <Route path="/admin/audit" element={<AdminAuditPage />} />
-            <Route path="/admin/health" element={<AdminHealthPage />} />
-          </Route>
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/admin/settings" element={<AdminSettingsPage />} />
+          <Route path="/admin/email" element={<AdminEmailPage />} />
+          <Route path="/admin/audit" element={<AdminAuditPage />} />
+          <Route path="/admin/health" element={<AdminHealthPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

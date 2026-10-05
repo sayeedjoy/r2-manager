@@ -22,9 +22,10 @@ Things to try:
 - Switch between the table and grid views, sort, and filter by name or date.
 - Look inside \`logs/\` to see pagination.
 - Select a few files and download them one by one.
+- Open the Admin section in the sidebar: users, settings, email delivery, the audit log and health, all with sample data.
 
-Uploads, edits, renames, moves, deletes and share links are turned off here. Buttons for them
-are still shown so you can see what the app offers, but the server refuses the change.
+Uploads, edits, renames, moves, deletes, share links and settings changes are turned off here.
+Buttons for them are still shown so you can see what the app offers, but the server refuses the change.
 
 To run your own copy, see the project README.
 `;

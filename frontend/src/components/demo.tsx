@@ -3,8 +3,8 @@ import { FlaskConical } from "lucide-react";
 import { useAuthStatus } from "@/hooks/use-auth-status";
 
 /**
- * DEMO_MODE has no setup (registration), password reset, account or admin screens, so those routes send visitors to
- * the file browser, which sends them on to the demo sign-in if they haven't been through it.
+ * DEMO_MODE has no setup (registration) or password reset, so those routes send visitors to the file browser, which
+ * sends them on to the demo sign-in if they haven't been through it.
  */
 export function HiddenInDemo() {
   const { data } = useAuthStatus();
@@ -24,7 +24,7 @@ export function DemoBanner() {
       <p>
         <span className="font-semibold">Read-only demo.</span>{" "}
         <span className="text-white/90">
-          Browse, preview and download the sample files. Uploads, edits and deletes are turned off.
+          Browse the sample files and the admin pages. Uploads, edits, deletes and settings changes are turned off.
         </span>
       </p>
     </div>

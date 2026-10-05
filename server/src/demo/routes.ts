@@ -1,6 +1,6 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { AppError, loginRequestSchema, type AuthStatus, type LoginResponse } from "@r2-manager/shared";
+import { AppError, loginRequestSchema, type AuthStatus, type LoginResponse, type SessionInfo } from "@r2-manager/shared";
 import type { AppConfig } from "../config";
 import type { AuthUser, HonoEnv } from "../types";
 import type { Database } from "../db/client";
@@ -13,12 +13,13 @@ import { DEMO_READ_ONLY_MESSAGE } from "./storage";
  * database-backed routes, the share gateway and the cron trigger.
  */
 
-// An editor, so the upload/rename/share UI stays visible to show what the app does; the server refuses the writes.
+// An admin, so the upload/rename/share UI and the admin area (demo/admin.ts) are all there to look at; the server
+// refuses the writes.
 export const DEMO_VISITOR: AuthUser = {
   id: "demo",
   identity: "demo@example.com",
   displayName: "Demo visitor",
-  role: "editor",
+  role: "admin",
   demo: true,
 };
 
@@ -115,7 +116,7 @@ demoAuthRoutes.post("/logout", (c) => {
   return c.body(null, 204);
 });
 
-/** Database-free answers for the reads the SPA makes once signed in. */
+/** Database-free answers for the reads the SPA makes once signed in. The admin area's are in demo/admin.ts. */
 export const demoRoutes = new Hono<HonoEnv>();
 
 demoRoutes.get("/me", (c) => {
@@ -126,11 +127,25 @@ demoRoutes.get("/me", (c) => {
     displayName,
     role,
     authMode: c.var.config.env.AUTH_MODE,
-    hasPassword: false,
+    hasPassword: true,
     twoFactorEnabled: false,
     recoveryCodesRemaining: 0,
     demo: true,
   });
+});
+
+// The account page lists sessions. The demo keeps none, so it shows just the browser that's asking.
+demoRoutes.get("/account/sessions", (c) => {
+  const now = new Date().toISOString();
+  const session: SessionInfo = {
+    id: "demo",
+    current: true,
+    userAgent: c.req.header("user-agent")?.slice(0, 512) ?? null,
+    ip: null,
+    createdAt: now,
+    lastSeenAt: now,
+  };
+  return c.json({ sessions: [session] });
 });
 
 demoRoutes.get("/settings", (c) => c.json(DEFAULT_SETTINGS));
