@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { loadConfig, resetConfigForTests } from "../src/config";
+import { isDemoMode, loadConfig, resetConfigForTests } from "../src/config";
 import { createApp } from "../src/app";
 import { DEMO_LOGIN } from "../src/demo/routes";
 import { DemoStorage } from "../src/demo/storage";
@@ -33,6 +33,17 @@ describe("DEMO_MODE config", () => {
     expect(config.env.DATABASE_URL).not.toContain("real");
     expect(config.env.R2_SECRET_ACCESS_KEY).not.toBe("real-secret");
     expect(config.r2Endpoint).not.toContain("localhost");
+  });
+
+  it("reads the flag past quotes, capitals and whitespace", () => {
+    for (const value of ["True", "TRUE", " true ", '"true"', "'1'", "true\r"]) {
+      expect(isDemoMode({ DEMO_MODE: value }), JSON.stringify(value)).toBe(true);
+      expect(loadConfig({ ...demoEnv, DEMO_MODE: value }).demo, JSON.stringify(value)).toBe(true);
+      resetConfigForTests();
+    }
+    for (const value of [undefined, "", "false", "False", "0", '""', "yes please"]) {
+      expect(isDemoMode({ DEMO_MODE: value }), JSON.stringify(value)).toBe(false);
+    }
   });
 
   it("is off unless asked for", () => {

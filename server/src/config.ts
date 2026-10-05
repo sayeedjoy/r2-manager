@@ -2,6 +2,19 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { AppError, AUTH_MODES } from "@r2-manager/shared";
 
+/**
+ * Hosting panels and `docker --env-file` can hand over a flag as `"true"` (quotes kept), `True` or with stray
+ * whitespace. Read past those, so DEMO_MODE=True doesn't quietly mean "off" and send the container to Postgres.
+ */
+function normalizeFlag(value: string | undefined): string | undefined {
+  const flag = value
+    ?.trim()
+    .replace(/^(["'])(.*)\1$/, "$2")
+    .trim()
+    .toLowerCase();
+  return flag || undefined;
+}
+
 const envSchema = z
   .object({
     NODE_ENV: z
@@ -35,10 +48,13 @@ const envSchema = z
     CRON_SECRET: z.string().min(32).optional(),
 
     // Public demo site: sample files in memory, no database, one shared demo sign-in, every write refused.
-    DEMO_MODE: z
-      .enum(["true", "false", "1", "0"])
-      .default("false")
-      .transform((v) => v === "true" || v === "1"),
+    DEMO_MODE: z.preprocess(
+      (v) => (typeof v === "string" ? normalizeFlag(v) : v),
+      z
+        .enum(["true", "false", "1", "0"])
+        .default("false")
+        .transform((v) => v === "true" || v === "1"),
+    ),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production") {
@@ -99,7 +115,7 @@ export const DEMO_BUCKET = "demo-bucket";
 
 /** For the scripts that talk to Postgres without loading the full config (db/migrate.ts, scripts/create-admin.ts). */
 export function isDemoMode(source: NodeJS.ProcessEnv = process.env): boolean {
-  return DEMO_FLAG.test(source.DEMO_MODE ?? "");
+  return DEMO_FLAG.test(normalizeFlag(source.DEMO_MODE) ?? "");
 }
 
 /**

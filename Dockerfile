@@ -40,5 +40,6 @@ EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD wget -q -O /dev/null "http://127.0.0.1:${PORT}/healthz" || exit 1
 # Apply pending migrations, then replace the shell with Node so it gets SIGTERM directly.
-# Set SKIP_MIGRATIONS=1 to run them yourself instead (node dist/migrate.mjs). DEMO_MODE has no database, so it skips them too.
-CMD ["sh", "-c", "[ \"$SKIP_MIGRATIONS\" = \"1\" ] || [ \"$DEMO_MODE\" = \"true\" ] || [ \"$DEMO_MODE\" = \"1\" ] || node dist/migrate.mjs && exec node dist/server.mjs"]
+# Set SKIP_MIGRATIONS=1 to run them yourself instead (node dist/migrate.mjs). DEMO_MODE has no database: migrate.mjs
+# checks for it itself (the same way the server does) and exits without connecting.
+CMD ["sh", "-c", "[ \"$SKIP_MIGRATIONS\" = \"1\" ] || node dist/migrate.mjs && exec node dist/server.mjs"]
