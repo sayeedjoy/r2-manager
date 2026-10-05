@@ -1,6 +1,6 @@
 # Demo mode
 
-`DEMO_MODE=true` turns the app into a public, read-only showcase. It's meant for a demo website only. Never set it on a deployment that manages real files.
+`DEMO_MODE=true` turns the app into a public, read-only showcase. It's meant for a demo website only. Never set it on a deployment that manages real files. The public demo runs at [r2.sayeedjoy.com](https://r2.sayeedjoy.com/).
 
 What changes:
 

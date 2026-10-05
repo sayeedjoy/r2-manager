@@ -20,12 +20,44 @@
 </p>
 
 <p align="center">
+  <a href="https://r2.sayeedjoy.com/"><b>Live demo</b></a> ·
+  <a href="#screenshots">Screenshots</a> ·
   <a href="#features">Features</a> ·
   <a href="#self-hosting">Self-hosting</a> ·
   <a href="#configuration">Configuration</a> ·
   <a href="#operations">Operations</a> ·
   <a href="#local-development">Development</a>
 </p>
+
+<p align="center">
+  <a href="https://r2.sayeedjoy.com/">
+    <img src="docs/screenshots/files.webp" alt="The R2 Manager file browser showing folders and files in a bucket" width="900" />
+  </a>
+</p>
+
+---
+
+## Live demo
+
+Try it at **[r2.sayeedjoy.com](https://r2.sayeedjoy.com/)**. Sign in with the demo account shown on the sign-in page:
+
+| Email | Password |
+| --- | --- |
+| `demo@example.com` | `r2-manager-demo` |
+
+The demo is read-only and runs on built-in sample files, with no database or real bucket behind it. You can browse, preview and download, and look around the admin pages, but uploads, edits, deletes and settings changes are refused. See [docs/demo-mode.md](docs/demo-mode.md) for how it works.
+
+---
+
+## Screenshots
+
+Taken from the live demo.
+
+| | |
+| --- | --- |
+| <img src="docs/screenshots/files-dark.webp" alt="A folder of log files in dark mode, with sorting, filters and pagination" /><br /><sub>**File browser**, in dark mode</sub> | <img src="docs/screenshots/preview-csv.webp" alt="A CSV file previewed as a table" /><br /><sub>**Previews** for CSV, images, PDF, JSON and text</sub> |
+| <img src="docs/screenshots/editor.webp" alt="Editing a JSON file in the browser" /><br /><sub>**In-browser editor**</sub> | <img src="docs/screenshots/share-link.webp" alt="The share link dialog with password, expiry and download limit" /><br /><sub>**Share links** with password, expiry and download limit</sub> |
+| <img src="docs/screenshots/audit-log.webp" alt="The audit log listing actions, actors, targets and outcomes" /><br /><sub>**Audit log**, searchable and filterable</sub> | <img src="docs/screenshots/users-dark.webp" alt="The users page showing roles, bucket grants and account status" /><br /><sub>**Users**, roles and per-folder grants</sub> |
 
 ---
 
