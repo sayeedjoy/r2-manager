@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, FlaskConical } from "lucide-react";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { usesPasswordLogin } from "@r2-manager/shared";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { usesPasswordLogin, type AuthStatus } from "@r2-manager/shared";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -40,10 +40,18 @@ export function LoginPage() {
   }
 
   return (
-    <AuthLayout title="Sign in" description="Use the email and password for your R2 Manager account.">
+    <AuthLayout
+      title="Sign in"
+      description={
+        status?.demoLogin
+          ? "This is a read-only demo. Sign in with the demo account below."
+          : "Use the email and password for your R2 Manager account."
+      }
+    >
       <PasswordStep
         signedOut={params.has("signedOut")}
         resetAvailable={!!status?.passwordResetAvailable}
+        demoLogin={status?.demoLogin}
         onMfaRequired={() => setStep("mfa")}
         onDone={finish}
       />
@@ -54,16 +62,19 @@ export function LoginPage() {
 function PasswordStep({
   signedOut,
   resetAvailable,
+  demoLogin,
   onMfaRequired,
   onDone,
 }: {
   signedOut: boolean;
   resetAvailable: boolean;
+  /** DEMO_MODE: the public demo account, shown above the form and filled in to start with. */
+  demoLogin?: AuthStatus["demoLogin"];
   onMfaRequired: () => void;
   onDone: () => void;
 }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(demoLogin?.email ?? "");
+  const [password, setPassword] = useState(demoLogin?.password ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -77,7 +88,7 @@ function PasswordStep({
       else onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't sign in");
-      setPassword("");
+      setPassword(demoLogin?.password ?? "");
     } finally {
       setBusy(false);
     }
@@ -96,6 +107,20 @@ function PasswordStep({
           <Alert variant="destructive">
             <CircleAlert />
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {demoLogin && (
+          <Alert>
+            <FlaskConical />
+            <AlertTitle>Demo account</AlertTitle>
+            <AlertDescription>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3">
+                <dt>Email</dt>
+                <dd className="font-mono break-all text-foreground select-all">{demoLogin.email}</dd>
+                <dt>Password</dt>
+                <dd className="font-mono break-all text-foreground select-all">{demoLogin.password}</dd>
+              </dl>
+            </AlertDescription>
           </Alert>
         )}
         <Field>
@@ -129,7 +154,9 @@ function PasswordStep({
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          {!resetAvailable && <FieldDescription>Forgot it? Ask an administrator to reset it for you.</FieldDescription>}
+          {!resetAvailable && !demoLogin && (
+            <FieldDescription>Forgot it? Ask an administrator to reset it for you.</FieldDescription>
+          )}
         </Field>
         <Button type="submit" disabled={busy || !email.trim() || !password}>
           {busy && <Spinner data-icon="inline-start" />}

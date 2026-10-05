@@ -22,8 +22,8 @@ export function App() {
     <BrowserRouter>
       <Routes>
         {/* Signed-out screens sit outside RequireAuth and AppShell, so they make no management API calls. */}
+        <Route path="/login" element={<LoginPage />} />
         <Route element={<HiddenInDemo />}>
-          <Route path="/login" element={<LoginPage />} />
           <Route path="/setup" element={<SetupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />

@@ -111,19 +111,17 @@ export function NavUser() {
                 ))}
               </DropdownMenuRadioGroup>
             </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             {!me.demo && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem render={<Link to="/account" />}>
-                  <ShieldCheck />
-                  Account and security
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut />
-                  Sign out
-                </DropdownMenuItem>
-              </>
+              <DropdownMenuItem render={<Link to="/account" />}>
+                <ShieldCheck />
+                Account and security
+              </DropdownMenuItem>
             )}
+            <DropdownMenuItem onClick={handleSignOut}>
+              <LogOut />
+              Sign out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

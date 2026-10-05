@@ -52,7 +52,7 @@ The app has three separately authenticated route trees:
 2. **`/s/:token`** is the public share gateway (`share-gateway/`). It has no management auth. It gets strict CSP, `noindex` and `no-store` headers, Postgres-backed rate limiting and a server-rendered password page. Share visitors never load the SPA.
 3. **`/api/v1/internal/*`** covers `/cron`, protected by the `x-cron-secret` header.
 
-**`DEMO_MODE=true`** (`config.demo`) is for the public demo site only. `createApp` swaps all of the above for `server/src/demo/`: a fixed demo visitor with no sign-in, `DemoStorage` (in-memory sample files, writes throw), no Postgres (a stand-in `db` throws if touched), 403 on every non-GET, and only the buckets/objects/metadata routes plus stubs for `auth/status`, `me`, `settings` and `shares`. A new route the SPA needs on load must be handled there too. See `docs/demo-mode.md`.
+**`DEMO_MODE=true`** (`config.demo`) is for the public demo site only. `createApp` swaps all of the above for `server/src/demo/`: one shared demo account whose credentials the sign-in page displays (a plain cookie session, no setup/registration or password reset), `DemoStorage` (in-memory sample files, writes throw), no Postgres (a stand-in `db` throws if touched; `db:migrate` and `create-admin` refuse to run), 403 on every non-GET except `auth/login` and `auth/logout`, and only the buckets/objects/metadata routes plus stubs for `auth/status`, `me`, `settings` and `shares`. A new route the SPA needs on load must be handled there too. See `docs/demo-mode.md`.
 
 `config`, `db`, `storage`, `user` and `correlationId` are all available on `c.var` (types in `server/src/types.ts`).
 

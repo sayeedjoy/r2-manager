@@ -43,8 +43,10 @@ export const authStatusSchema = z.object({
   setupTokenRequired: z.boolean(),
   /** SMTP is configured, so "Forgot password?" can actually send an email. */
   passwordResetAvailable: z.boolean(),
-  /** DEMO_MODE: a read-only showcase with no sign-in, so the sign-in screens send visitors to the app. */
+  /** DEMO_MODE: a read-only showcase with no setup, password reset, account or admin screens. */
   demo: z.boolean().optional(),
+  /** DEMO_MODE: the one shared account. It's public, so the sign-in page shows it. */
+  demoLogin: z.object({ email: z.string(), password: z.string() }).optional(),
 });
 export type AuthStatus = z.infer<typeof authStatusSchema>;
 

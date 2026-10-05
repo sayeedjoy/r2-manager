@@ -34,7 +34,7 @@ const envSchema = z
 
     CRON_SECRET: z.string().min(32).optional(),
 
-    // Public demo site: sample files in memory, no database, no sign-in, every write refused.
+    // Public demo site: sample files in memory, no database, one shared demo sign-in, every write refused.
     DEMO_MODE: z
       .enum(["true", "false", "1", "0"])
       .default("false")
@@ -97,13 +97,18 @@ function blankToUndefined(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 const DEMO_FLAG = /^(true|1)$/;
 export const DEMO_BUCKET = "demo-bucket";
 
+/** For the scripts that talk to Postgres without loading the full config (db/migrate.ts, scripts/create-admin.ts). */
+export function isDemoMode(source: NodeJS.ProcessEnv = process.env): boolean {
+  return DEMO_FLAG.test(source.DEMO_MODE ?? "");
+}
+
 /**
  * DEMO_MODE needs no database, bucket credentials or auth setup, but the schema (and the rest of the server's types)
  * still expects them. Replace them with inert placeholders, overriding anything set: a real database URL, bucket
  * names or keys left in the environment are then never loaded into a public demo, let alone used.
  */
 function withDemoOverrides(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (!DEMO_FLAG.test(source.DEMO_MODE ?? "")) return source;
+  if (!isDemoMode(source)) return source;
   return {
     ...source,
     DATABASE_URL: "postgres://demo.invalid/demo",

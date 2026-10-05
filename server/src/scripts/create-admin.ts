@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 import { emailSchema, passwordSchema } from "@r2-manager/shared";
+import { isDemoMode } from "../config";
 import { appSettings, passwordResetTokens, sessions, users } from "../db/schema";
 import { hashPassword } from "../services/crypto";
 
@@ -35,6 +36,12 @@ function promptHidden(question: string): Promise<string> {
 }
 
 async function main() {
+  // DEMO_MODE has no database or accounts; refuse before a DATABASE_URL left in the environment gets written to.
+  if (isDemoMode()) {
+    console.error("DEMO_MODE is on: the demo has no database, so there are no accounts to create.");
+    process.exit(1);
+  }
+
   const args = process.argv.slice(2);
   const reset2fa = args.includes("--reset-2fa");
   const [rawEmail, ...nameParts] = args.filter((a) => !a.startsWith("--"));

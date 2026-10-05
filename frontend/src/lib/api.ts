@@ -58,7 +58,7 @@ export interface Me {
   hasPassword: boolean;
   twoFactorEnabled: boolean;
   recoveryCodesRemaining: number;
-  /** DEMO_MODE's shared visitor: there's no account to manage or session to end. */
+  /** DEMO_MODE's shared visitor: it can sign out, but there's no account to manage. */
   demo?: boolean;
 }
 

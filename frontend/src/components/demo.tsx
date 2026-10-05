@@ -2,7 +2,10 @@ import { Navigate, Outlet } from "react-router-dom";
 import { FlaskConical } from "lucide-react";
 import { useAuthStatus } from "@/hooks/use-auth-status";
 
-/** DEMO_MODE has no sign-in, account or admin screens, so those routes send visitors to the file browser. */
+/**
+ * DEMO_MODE has no setup (registration), password reset, account or admin screens, so those routes send visitors to
+ * the file browser, which sends them on to the demo sign-in if they haven't been through it.
+ */
 export function HiddenInDemo() {
   const { data } = useAuthStatus();
   return data?.demo ? <Navigate to="/" replace /> : <Outlet />;

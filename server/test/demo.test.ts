@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig, resetConfigForTests } from "../src/config";
 import { createApp } from "../src/app";
+import { DEMO_LOGIN } from "../src/demo/routes";
 import { DemoStorage } from "../src/demo/storage";
 
 afterEach(() => resetConfigForTests());
@@ -77,19 +78,68 @@ describe("DemoStorage", () => {
 
 describe("DEMO_MODE app", () => {
   const app = () => createApp({ config: loadConfig(demoEnv) });
-  const get = (path: string, headers?: Record<string, string>) => app().request(`http://localhost:8787${path}`, { headers });
-  const post = (path: string, body: unknown) =>
+  const signedIn = { cookie: "r2m_demo=demo" };
+  const anonymousGet = (path: string) => app().request(`http://localhost:8787${path}`);
+  const get = (path: string, headers?: Record<string, string>) =>
+    app().request(`http://localhost:8787${path}`, { headers: { ...signedIn, ...headers } });
+  const post = (path: string, body: unknown, headers: Record<string, string> = signedIn) =>
     app().request(`http://localhost:8787${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: "http://localhost:8787" },
+      headers: { "content-type": "application/json", origin: "http://localhost:8787", ...headers },
       body: JSON.stringify(body),
     });
 
-  it("signs nobody in: status says demo and /me is the demo visitor", async () => {
-    const status = await (await get("/api/v1/auth/status")).json();
-    expect(status).toMatchObject({ demo: true, setupRequired: false });
-    const me = await (await get("/api/v1/me")).json();
+  it("publishes the demo account and keeps registration closed", async () => {
+    const status = await (await anonymousGet("/api/v1/auth/status")).json();
+    expect(status).toMatchObject({
+      demo: true,
+      setupRequired: false,
+      passwordResetAvailable: false,
+      demoLogin: DEMO_LOGIN,
+    });
+  });
+
+  it("asks for the demo sign-in before showing anything", async () => {
+    for (const path of ["/api/v1/me", "/api/v1/buckets", "/api/v1/objects?bucket=demo-bucket&prefix="]) {
+      expect((await anonymousGet(path)).status, path).toBe(401);
+    }
+  });
+
+  it("signs in with the demo account only, then signs out", async () => {
+    for (const body of [
+      { ...DEMO_LOGIN, password: "wrong" },
+      { ...DEMO_LOGIN, email: "someone@example.com" },
+    ]) {
+      const refused = await post("/api/v1/auth/login", body, {});
+      expect(refused.status).toBe(401);
+      expect(refused.headers.get("set-cookie")).toBeNull();
+    }
+
+    const login = await post("/api/v1/auth/login", DEMO_LOGIN, {});
+    expect(login.status).toBe(200);
+    expect(await login.json()).toEqual({ mfaRequired: false });
+    const setCookie = login.headers.get("set-cookie")!;
+    expect(setCookie).toMatch(/HttpOnly/i);
+    expect(setCookie).toMatch(/SameSite=Strict/i);
+
+    const cookie = setCookie.split(";")[0]!;
+    const me = await (await get("/api/v1/me", { cookie })).json();
     expect(me).toMatchObject({ displayName: "Demo visitor", demo: true });
+
+    const logout = await post("/api/v1/auth/logout", {}, { cookie });
+    expect(logout.status).toBe(204);
+    expect(logout.headers.get("set-cookie")).toMatch(/^r2m_demo=;/);
+  });
+
+  it("uses a __Host- cookie over https", async () => {
+    resetConfigForTests();
+    const config = loadConfig({ ...demoEnv, NODE_ENV: "production", APP_BASE_URL: "https://demo.example.com" });
+    const login = await createApp({ config }).request("https://demo.example.com/api/v1/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(DEMO_LOGIN),
+    });
+    expect(login.headers.get("set-cookie")).toMatch(/^__Host-r2m_demo=demo;.*Secure/i);
   });
 
   it("browses and downloads the sample files without a database", async () => {
@@ -124,8 +174,9 @@ describe("DEMO_MODE app", () => {
       ["/api/v1/objects/rename", { bucket: "demo-bucket", key: "README.md", newName: "x.md" }],
       ["/api/v1/objects/delete", { bucket: "demo-bucket", keys: ["README.md"] }],
       ["/api/v1/uploads", { bucket: "demo-bucket", key: "x.bin", size: 1 }],
-      ["/api/v1/auth/login", { email: "a@example.com", password: "whatever" }],
-      ["/api/v1/auth/setup", { displayName: "x" }],
+      ["/api/v1/auth/setup", { displayName: "x", email: "a@example.com", password: "a-long-password" }],
+      ["/api/v1/auth/password/forgot", { email: "demo@example.com" }],
+      ["/api/v1/auth/password/reset", { token: "x", password: "a-long-password" }],
     ] as const) {
       const res = await post(path, body);
       expect(res.status, path).toBe(403);

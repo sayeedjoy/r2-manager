@@ -17,7 +17,7 @@ loadDotenv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 const config = loadConfig();
 if (config.demo) {
   console.warn(
-    "DEMO_MODE is on: serving built-in sample files with no sign-in and no database. Never set it on a real deployment.",
+    "DEMO_MODE is on: serving built-in sample files behind a public demo sign-in, with no database. Never set it on a real deployment.",
   );
 }
 const apiApp = createApp({ config });
